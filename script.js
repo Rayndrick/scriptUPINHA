@@ -1,1 +1,1 @@
-
+alert("SCRIPT.JS FUNCIONANDO!");
