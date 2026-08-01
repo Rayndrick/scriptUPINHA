@@ -730,13 +730,11 @@ const lista = [
             b.style.cursor="pointer";
             b.style.textAlign="left";
 
-           b.onclick = function(){
+         b.onclick = function(){
 
-    preencherCID(item.cid);
+    window.preencherCID(item.cid);
 
-    setTimeout(function(){
-        fundo.remove();
-    },100);
+    fundo.remove();
 
 };
 
