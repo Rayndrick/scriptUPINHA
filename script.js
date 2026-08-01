@@ -238,7 +238,9 @@ cid.onclick=abrirMenuCID;
 
 
 painel.appendChild(relatorio);
+painel.appendChild(cid);
 painel.appendChild(atualizar);
+
 barra.appendChild(atendimento);
 barra.appendChild(painel);
 
@@ -601,12 +603,13 @@ function adicionarRelatorio(nome, idade, chegada){
     console.log("Paciente salvo:", nome);
 
 }
-function abrirRelatorio(){
-    function abrirMenuCID(){
+function abrirMenuCID(){
 
     alert("Menu CID funcionando");
 
 }
+
+function abrirRelatorio(){
 
     const pacientes =
         JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
@@ -667,11 +670,11 @@ function abrirRelatorio(){
 
     <body>
 
-  <h2>RELATÓRIO DO PLANTÃO</h2>
+    <h2>RELATÓRIO DO PLANTÃO</h2>
 
-<b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
+    <b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
 
-<b>Total de pacientes:</b> ${pacientes.length}
+    <b>Total de pacientes:</b> ${pacientes.length}
 
     <table>
 
@@ -694,7 +697,7 @@ function abrirRelatorio(){
 
     pacientes.forEach(function(p){
 
-        html+=`
+        html += `
         <tr>
 
         <td>${p.numero}</td>
@@ -714,7 +717,7 @@ function abrirRelatorio(){
 
     });
 
-    html+=`
+    html += `
     </table>
 
     </body>
@@ -727,6 +730,7 @@ function abrirRelatorio(){
     aba.document.close();
 
 }
+
 function clicarPesquisar(){
 
     const botoes=[
