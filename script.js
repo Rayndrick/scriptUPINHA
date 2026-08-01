@@ -602,6 +602,11 @@ function adicionarRelatorio(nome, idade, chegada){
 
 }
 function abrirRelatorio(){
+    function abrirMenuCID(){
+
+    alert("Menu CID funcionando");
+
+}
 
     const pacientes =
         JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
