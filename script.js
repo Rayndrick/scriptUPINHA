@@ -764,63 +764,76 @@ function clicarPesquisar(){
 //--------------------------------------------------
 // INICIALIZA
 //--------------------------------------------------
-    iniciarReceituario();
+
+iniciarReceituario();
+
 function iniciarObserver(){
 
     let timerObserver;
 
-const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() => {
 
-    clearTimeout(timerObserver);
+        clearTimeout(timerObserver);
 
-    timerObserver = setTimeout(() => {
+        timerObserver = setTimeout(() => {
 
-        if(
-    !window.celkHelperBar ||
-    !document.body.contains(window.celkHelperBar)
-){
-    criarInterface();
-}
+            if(
+                !window.celkHelperBar ||
+                !document.body.contains(window.celkHelperBar)
+            ){
+                console.log("Reconstruindo barra...");
+                criarInterface();
+            }
 
-if(
-    !window.celkReceita ||
-    !document.body.contains(window.celkReceita)
-){
-    criarCampoPrescricao();
-}
+            if(
+                !window.celkReceita ||
+                !document.body.contains(window.celkReceita)
+            ){
+                console.log("Reconstruindo prescrição...");
+                criarCampoPrescricao();
+            }
 
-    },150);
+        },150);
 
-});
+    });
 
-function iniciarObserver(){
+    const alvo =
+        document.querySelector("#content") ||
+        document.querySelector("#main") ||
+        document.body;
+
+    observer.observe(alvo,{
+        childList:true,
+        subtree:true
+    });
 
     setInterval(() => {
 
-        if (!document.getElementById("celk-helper")) {
-
-            console.log("Reconstruindo barra...");
-
+        if(
+            !window.celkHelperBar ||
+            !document.body.contains(window.celkHelperBar)
+        ){
             criarInterface();
-
         }
 
-        if (
+        if(
             typeof tinymce !== "undefined" &&
             tinymce.activeEditor &&
-            !document.getElementById("celk-prescricao-ped")
-        ) {
-
-            console.log("Reconstruindo prescrição...");
-
+            (
+                !window.celkReceita ||
+                !document.body.contains(window.celkReceita)
+            )
+        ){
             criarCampoPrescricao();
-
         }
 
     },300);
-iniciar();
-iniciarObserver();
+
 }
+
+iniciar();
+
+iniciarObserver();
 
 //--------------------------------------------------
     //--------------------------------------------------
