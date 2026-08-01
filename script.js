@@ -332,10 +332,30 @@ setTimeout(() => {
 
 };
 
+function selecionarOpcao(select, texto){
+
+    if(!select) return;
+
+    const op = [...select.options].find(o =>
+        o.text.trim().toUpperCase() === texto.toUpperCase()
+    );
+
+    if(op){
+
+        select.value = op.value;
+
+        select.dispatchEvent(new Event("change",{
+            bubbles:true
+        }));
+
+    }
+
+}
 
 painel.appendChild(relatorio);
 painel.appendChild(cid);
 painel.appendChild(atualizar);
+    
 
 barra.appendChild(atendimento);
 barra.appendChild(painel);
