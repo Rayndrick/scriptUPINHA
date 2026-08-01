@@ -235,6 +235,31 @@ cid.onmouseout=function(){
 };
 
 cid.onclick=abrirMenuCID;
+    function preencherCID(cid){
+
+    const campo = document.querySelector(
+        "input[name*='diagnost'], input[id*='diagnost'], input[name*='cid'], input[id*='cid']"
+    );
+
+    if(!campo){
+
+        alert("Campo Diagnóstico não encontrado.");
+
+        return;
+
+    }
+
+    campo.focus();
+
+    campo.value = cid;
+
+    campo.dispatchEvent(new Event("input",{bubbles:true}));
+
+    campo.dispatchEvent(new Event("change",{bubbles:true}));
+
+    campo.dispatchEvent(new KeyboardEvent("keyup",{bubbles:true}));
+
+}
 
 
 painel.appendChild(relatorio);
@@ -702,9 +727,11 @@ function abrirMenuCID(){
 
             b.onclick=function(){
 
-                alert(item.cid);
+    fundo.remove();
 
-            };
+    preencherCID(item.cid);
+
+};
 
             listaDiv.appendChild(b);
 
