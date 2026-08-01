@@ -682,20 +682,23 @@ function abrirMenuCID(){
         return;
     }
 
-    const lista = [
+const lista = [
 
-        {cid:"J06.9", nome:"IVAS"},
-        {cid:"J02.9", nome:"Faringite"},
-        {cid:"J03.9", nome:"Amigdalite"},
-        {cid:"H66.9", nome:"Otite Média"},
-        {cid:"A09", nome:"Gastroenterite"},
-        {cid:"B34.9", nome:"Virose"},
-        {cid:"R50", nome:"Febre"},
-        {cid:"J45", nome:"Asma"},
-        {cid:"L20.9", nome:"Dermatite"},
-        {cid:"K59.0", nome:"Constipação"}
+    {cid:"J06.9", nome:"IVAS"},
+    {cid:"J02.9", nome:"Faringite"},
+    {cid:"J03.9", nome:"Amigdalite"},
+    {cid:"H66.9", nome:"Otite Média"},
+    {cid:"A09", nome:"Gastroenterite"},
+    {cid:"B34.9", nome:"Virose"},
+    {cid:"R50", nome:"Febre"},
+    {cid:"J45", nome:"Asma"},
+    {cid:"L20.9", nome:"Dermatite"},
+    {cid:"K59.0", nome:"Constipação"},
+    {cid:"R10.4", nome:"Dor Abdominal"},
+    {cid:"J00", nome:"Resfriado Comum"},
+    {cid:"Z00.1", nome:"Consulta de Rotina"}
 
-    ];
+];
 
     const fundo=document.createElement("div");
     fundo.id="celk-cid-menu";
