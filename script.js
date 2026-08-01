@@ -737,9 +737,41 @@ const lista = [
             b.style.cursor="pointer";
             b.style.textAlign="left";
 
-         b.onclick = function(){
+        b.onclick = function(){
 
     window.preencherCID(item.cid);
+
+    // aguarda o CID ser preenchido
+    setTimeout(function(){
+
+        const nomeMedico = document.querySelector(
+            'label[wicketpath="linkMinhaConta_usuarioLogado"]'
+        )?.textContent.trim();
+
+        const select = document.querySelector(
+            'select[name*="profissional"]'
+        );
+
+        if(nomeMedico && select){
+
+            const opcao = [...select.options].find(o =>
+                o.text.trim().toUpperCase() ===
+                nomeMedico.toUpperCase()
+            );
+
+            if(opcao){
+
+                select.value = opcao.value;
+
+                select.dispatchEvent(new Event("change",{
+                    bubbles:true
+                }));
+
+            }
+
+        }
+
+    },300);
 
     fundo.remove();
 
