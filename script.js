@@ -270,19 +270,63 @@ window.preencherCID = function(cid){
 
 setTimeout(() => {
 
+    // MÉDICO
     const select = document.querySelector(
         'select[name*="profissional"]'
     );
 
-    if (!select) return;
+    if (select) {
 
-    select.value = "96829844";
+        select.value = "96829844";
 
-    select.dispatchEvent(new Event("change", {
-        bubbles: true
-    }));
+        select.dispatchEvent(new Event("change", {
+            bubbles: true
+        }));
+    }
 
-}, 500);
+    // MOTIVO = MELHORADO
+    const motivo = document.querySelector(
+        'select[name*="motivo"]'
+    );
+
+    if (motivo) {
+
+        const op = [...motivo.options].find(o =>
+            o.text.trim().toUpperCase() === "MELHORADO"
+        );
+
+        if (op) {
+
+            motivo.value = op.value;
+
+            motivo.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+        }
+    }
+
+    // CLASSIFICAÇÃO = OUTROS
+    const classificacao = document.querySelector(
+        'select[name*="classificacao"]'
+    );
+
+    if (classificacao) {
+
+        const op = [...classificacao.options].find(o =>
+            o.text.trim().toUpperCase() === "OUTROS"
+        );
+
+        if (op) {
+
+            classificacao.value = op.value;
+
+            classificacao.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+        }
+    }
+
+}, 1200);
 };
 
 
