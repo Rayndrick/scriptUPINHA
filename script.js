@@ -255,10 +255,21 @@ window.preencherCID = function(cid){
 
     token.clear();
 
-    token.add({
-        id: cid.replace(/\./g, ""),
-        name: cid.toUpperCase()
+    const item = {
+    id: cid.replace(/\./g, ""),
+    name: cid.toUpperCase()
+};
+
+token.clear();
+token.add(item);
+
+const el = document.querySelector("[onadd]");
+
+if (el) {
+    Wicket.Ajax.post({
+        u: el.getAttribute("onadd") + "&id=" + item.id
     });
+}
 
 };
 
