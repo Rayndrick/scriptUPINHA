@@ -246,32 +246,27 @@ window.preencherCID = function(cid){
         return;
     }
 
-    const token = $(campo).data().tokenInputObject;
+    const dados = $(campo).data();
 
-    if(!token){
+    if(!dados || !dados.tokenInputObject){
         alert("TokenInput não encontrado.");
         return;
     }
 
+    const token = dados.tokenInputObject;
+
     token.clear();
 
     const item = {
-    id: cid.replace(/\./g, ""),
-    name: cid.toUpperCase()
-};
+        id: cid.replace(/\./g,""),
+        name: "( " + cid.replace(/\./g,"") + " ) " + cid
+    };
 
-token.clear();
-token.add(item);
+    token.add(item);
 
-const els = $(campo).parents().find("[onadd]");
-
-const el = els[els.length - 1];
-
-if (el) {
-    Wicket.Ajax.post({
-        u: el.getAttribute("onadd") + "&id=" + item.id
-    });
-}
+    if(typeof dados.settings.onAdd === "function"){
+        dados.settings.onAdd(item);
+    }
 
 };
 
