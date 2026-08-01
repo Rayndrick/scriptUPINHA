@@ -237,9 +237,9 @@ cid.onmouseout=function(){
 cid.onclick=abrirMenuCID;
 window.preencherCID = function(cid){
 
-    const campo = document.querySelector(
-        'li.token-input-input-token-celk input[id^="token-input-"]'
-    );
+   const campo = document.querySelector(
+    'input[name*="cid:descricao:textField"]'
+);
 
     if(!campo){
         alert("Campo CID não encontrado.");
