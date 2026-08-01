@@ -605,7 +605,132 @@ function adicionarRelatorio(nome, idade, chegada){
 }
 function abrirMenuCID(){
 
-    alert("Menu CID funcionando");
+    if(document.getElementById("celk-cid-menu")){
+        document.getElementById("celk-cid-menu").remove();
+        return;
+    }
+
+    const lista = [
+
+        {cid:"J06.9", nome:"IVAS"},
+        {cid:"J02.9", nome:"Faringite"},
+        {cid:"J03.9", nome:"Amigdalite"},
+        {cid:"H66.9", nome:"Otite Média"},
+        {cid:"A09", nome:"Gastroenterite"},
+        {cid:"B34.9", nome:"Virose"},
+        {cid:"R50", nome:"Febre"},
+        {cid:"J45", nome:"Asma"},
+        {cid:"L20.9", nome:"Dermatite"},
+        {cid:"K59.0", nome:"Constipação"}
+
+    ];
+
+    const fundo=document.createElement("div");
+    fundo.id="celk-cid-menu";
+
+    fundo.style.position="fixed";
+    fundo.style.left="0";
+    fundo.style.top="0";
+    fundo.style.width="100%";
+    fundo.style.height="100%";
+    fundo.style.background="rgba(0,0,0,.35)";
+    fundo.style.zIndex="999999";
+
+    const caixa=document.createElement("div");
+
+    caixa.style.position="absolute";
+    caixa.style.left="50%";
+    caixa.style.top="50%";
+    caixa.style.transform="translate(-50%,-50%)";
+    caixa.style.width="420px";
+    caixa.style.maxHeight="600px";
+    caixa.style.background="#fff";
+    caixa.style.borderRadius="8px";
+    caixa.style.boxShadow="0 0 20px rgba(0,0,0,.3)";
+    caixa.style.padding="15px";
+    caixa.style.overflow="auto";
+
+    caixa.innerHTML=`
+        <h2 style="margin-top:0">
+            CID FAVORITOS
+        </h2>
+
+        <input
+            id="celk-cid-pesquisa"
+            placeholder="Pesquisar..."
+            style="
+                width:100%;
+                padding:8px;
+                margin-bottom:12px;
+            "
+        >
+
+        <div id="celk-cid-lista"></div>
+    `;
+
+    fundo.appendChild(caixa);
+
+    document.body.appendChild(fundo);
+
+    const listaDiv=document.getElementById("celk-cid-lista");
+
+    function montar(texto=""){
+
+        listaDiv.innerHTML="";
+
+        lista
+        .filter(x=>
+
+            x.cid.toLowerCase().includes(texto.toLowerCase()) ||
+
+            x.nome.toLowerCase().includes(texto.toLowerCase())
+
+        )
+        .forEach(item=>{
+
+            const b=document.createElement("button");
+
+            b.innerHTML=
+                "<b>"+item.cid+"</b> - "+item.nome;
+
+            b.style.display="block";
+            b.style.width="100%";
+            b.style.marginBottom="6px";
+            b.style.padding="8px";
+            b.style.cursor="pointer";
+            b.style.textAlign="left";
+
+            b.onclick=function(){
+
+                alert(item.cid);
+
+            };
+
+            listaDiv.appendChild(b);
+
+        });
+
+    }
+
+    montar();
+
+    document
+        .getElementById("celk-cid-pesquisa")
+        .oninput=function(){
+
+            montar(this.value);
+
+        };
+
+    fundo.onclick=function(e){
+
+        if(e.target===fundo){
+
+            fundo.remove();
+
+        }
+
+    };
 
 }
 
