@@ -267,6 +267,34 @@ window.preencherCID = function(cid){
     if(typeof dados.settings.onAdd === "function"){
         dados.settings.onAdd(item);
     }
+    setTimeout(function(){
+
+    const nomeMedico = document.querySelector(
+        'label[wicketpath="linkMinhaConta_usuarioLogado"]'
+    )?.textContent.trim();
+
+    const select = document.querySelector(
+        'select[name*="profissional"]'
+    );
+
+    if(!nomeMedico || !select) return;
+
+    for(const op of select.options){
+
+        if(op.text.trim().toUpperCase() === nomeMedico.toUpperCase()){
+
+            select.value = op.value;
+
+            select.dispatchEvent(new Event("change",{bubbles:true}));
+
+            console.log("Médico preenchido:", op.text);
+
+            break;
+        }
+
+    }
+
+},300);
 
 };
 
