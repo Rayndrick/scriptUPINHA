@@ -261,7 +261,6 @@ window.preencherCID = function(cid){
     });
 
 };
-}
 
 
 painel.appendChild(relatorio);
