@@ -263,7 +263,9 @@ window.preencherCID = function(cid){
 token.clear();
 token.add(item);
 
-const el = document.querySelector("[onadd]");
+const els = $(campo).parents().find("[onadd]");
+
+const el = els[els.length - 1];
 
 if (el) {
     Wicket.Ajax.post({
