@@ -958,11 +958,13 @@ function iniciarObserver(){
 
             if(
                 !window.celkReceita ||
-                !document.body.contains(window.celkReceita)
-            ){
-                console.log("Reconstruindo prescrição...");
-                criarCampoPrescricao();
-            }
+            if(
+    typeof tinymce !== "undefined" &&
+    tinymce.activeEditor &&
+    !document.getElementById("celk-prescricao-ped")
+){
+    criarCampoPrescricao();
+}
 
         },150);
 
@@ -1037,8 +1039,9 @@ function criarCampoPrescricao(){
     }
 
     const barra=document.createElement("div");
-    window.celkReceita = barra;
+window.celkReceita = barra;
 
+barra.id = "celk-prescricao-ped";
     barra.id="celk-prescricao-ped";
 
     barra.style.cssText=`
