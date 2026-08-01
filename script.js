@@ -966,13 +966,12 @@ function iniciarObserver(){
                 criarInterface();
             }
 
-            if(
-                !window.celkReceita ||
-            if(
+           if(
     typeof tinymce !== "undefined" &&
     tinymce.activeEditor &&
     !document.getElementById("celk-prescricao-ped")
 ){
+    console.log("Reconstruindo prescrição...");
     criarCampoPrescricao();
 }
 
