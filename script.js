@@ -265,37 +265,24 @@ window.preencherCID = function(cid){
     token.add(item);
 
     if(typeof dados.settings.onAdd === "function"){
-        dados.settings.onAdd(item);
-    }
-    setTimeout(function(){
+    dados.settings.onAdd(item);
+}
 
-    const nomeMedico = document.querySelector(
-        'label[wicketpath="linkMinhaConta_usuarioLogado"]'
-    )?.textContent.trim();
+setTimeout(() => {
 
     const select = document.querySelector(
         'select[name*="profissional"]'
     );
 
-    if(!nomeMedico || !select) return;
+    if (!select) return;
 
-    for(const op of select.options){
+    select.value = "96829844";
 
-        if(op.text.trim().toUpperCase() === nomeMedico.toUpperCase()){
+    select.dispatchEvent(new Event("change", {
+        bubbles: true
+    }));
 
-            select.value = op.value;
-
-            select.dispatchEvent(new Event("change",{bubbles:true}));
-
-            console.log("Médico preenchido:", op.text);
-
-            break;
-        }
-
-    }
-
-},300);
-
+}, 500);
 };
 
 
