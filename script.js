@@ -305,26 +305,31 @@ setTimeout(() => {
         }
     }
 
-    // CLASSIFICAÇÃO = OUTROS
-const classificacao = document.querySelector(
-    'select[name*="classificacaoAtendimento"]'
-);
-
-if (classificacao) {
-
-    const op = [...classificacao.options].find(o =>
-        o.text.trim().toUpperCase() === "OUTROS"
+       // CLASSIFICAÇÃO = OUTROS
+    const classificacao = document.querySelector(
+        'select[name*="classificacaoAtendimento"]'
     );
 
-    if (op) {
+    if (classificacao) {
 
-        classificacao.value = op.value;
+        const op = [...classificacao.options].find(o =>
+            o.text.trim().toUpperCase() === "OUTROS"
+        );
 
-        classificacao.dispatchEvent(new Event("change", {
-            bubbles: true
-        }));
+        if (op) {
+
+            classificacao.value = op.value;
+
+            classificacao.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+
+        }
 
     }
+
+}, 500);
+
 };
 
 
