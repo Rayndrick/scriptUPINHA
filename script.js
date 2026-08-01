@@ -770,7 +770,8 @@ function iniciarObserver(){
         }
 
     },300);
-
+iniciar();
+iniciarObserver();
 }
 
 //--------------------------------------------------
