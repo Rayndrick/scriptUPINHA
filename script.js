@@ -236,9 +236,9 @@ cid.onmouseout=function(){
 
 cid.onclick=abrirMenuCID;
 window.preencherCID = function(cid){
-    const campo = document.querySelector(
-        ".token-input-input-token-celk input"
-    );
+   const campo = document.activeElement.id.startsWith("token-input-")
+    ? document.activeElement
+    : document.querySelector("#token-input-id20d4");
 
     if(!campo){
 
