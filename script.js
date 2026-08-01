@@ -275,14 +275,17 @@ setTimeout(() => {
         'select[name*="profissional"]'
     );
 
-    if (select) {
+   if (select) {
 
-        select.value = "96829844";
+    select.value = "96829844";
 
-        select.dispatchEvent(new Event("change", {
-            bubbles: true
-        }));
-    }
+    select.dispatchEvent(new Event("change", {
+        bubbles: true
+    }));
+
+}
+
+atualizarCamposAlta();
 
     // MOTIVO = MELHORADO
     const motivo = document.querySelector(
@@ -351,7 +354,19 @@ function selecionarOpcao(select, texto){
     }
 
 }
+function atualizarCamposAlta(){
 
+    selecionarOpcao(
+        document.querySelector('select[name*="motivo"]'),
+        "OUTROS"
+    );
+
+    selecionarOpcao(
+        document.querySelector('select[name*="classificacaoAtendimento"]'),
+        "MELHORADO"
+    );
+
+}
 painel.appendChild(relatorio);
 painel.appendChild(cid);
 painel.appendChild(atualizar);
