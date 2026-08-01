@@ -236,75 +236,51 @@ cid.onmouseout=function(){
 
 cid.onclick=abrirMenuCID;
 window.preencherCID = function(cid){
-   const campo = document.activeElement.id.startsWith("token-input-")
-    ? document.activeElement
-    : document.querySelector("#token-input-id20d4");
+
+    const campo = document.querySelector(
+        'li.token-input-input-token-celk input[id^="token-input-"]'
+    );
 
     if(!campo){
-
         alert("Campo CID não encontrado.");
-
         return;
-
     }
 
     campo.focus();
 
-    campo.value = cid.replace(".","");
+    campo.value = cid;
 
-    campo.dispatchEvent(new Event("input",{bubbles:true}));
-
-    campo.dispatchEvent(new KeyboardEvent("keyup",{
-        key:cid.slice(-1),
+    campo.dispatchEvent(new Event("input",{
         bubbles:true
     }));
 
- setTimeout(() => {
-
-    const lista = document.querySelector(".token-input-dropdown-celk");
-
-    if (!lista) {
-
-        alert("Resultado do CID não apareceu.");
-        return;
-
-    }
-
-    campo.focus();
-
-    campo.dispatchEvent(new KeyboardEvent("keydown", {
-        key: "ArrowDown",
-        keyCode: 40,
-        which: 40,
-        bubbles: true
+    campo.dispatchEvent(new KeyboardEvent("keydown",{
+        key: cid.slice(-1),
+        bubbles:true
     }));
 
-    campo.dispatchEvent(new KeyboardEvent("keyup", {
-        key: "ArrowDown",
-        keyCode: 40,
-        which: 40,
-        bubbles: true
+    campo.dispatchEvent(new KeyboardEvent("keyup",{
+        key: cid.slice(-1),
+        bubbles:true
     }));
 
-    setTimeout(() => {
+    setTimeout(function(){
 
-        campo.dispatchEvent(new KeyboardEvent("keydown", {
-            key: "Enter",
-            keyCode: 13,
-            which: 13,
-            bubbles: true
-        }));
+        const primeiro = document.querySelector(
+            ".token-input-dropdown-celk li"
+        );
 
-        campo.dispatchEvent(new KeyboardEvent("keyup", {
-            key: "Enter",
-            keyCode: 13,
-            which: 13,
-            bubbles: true
-        }));
+        if(primeiro){
 
-    },150);
+            primeiro.click();
 
-},500);
+        }else{
+
+            alert("Resultado do CID não apareceu.");
+
+        }
+
+    },700);
 
 }
 
@@ -775,11 +751,13 @@ const lista = [
             b.style.cursor="pointer";
             b.style.textAlign="left";
 
-            b.onclick=function(){
-
-    fundo.remove();
+           b.onclick = function(){
 
     preencherCID(item.cid);
+
+    setTimeout(function(){
+        fundo.remove();
+    },100);
 
 };
 
