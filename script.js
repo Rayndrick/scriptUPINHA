@@ -237,51 +237,30 @@ cid.onmouseout=function(){
 cid.onclick=abrirMenuCID;
 window.preencherCID = function(cid){
 
-   const campo = document.querySelector(
-    'input[name*="cid:descricao:textField"]'
-);
+    const campo = document.querySelector(
+        'input[name*="cid:descricao:textField"]'
+    );
 
     if(!campo){
         alert("Campo CID não encontrado.");
         return;
     }
 
-    campo.focus();
+    const token = $(campo).data().tokenInputObject;
 
-    campo.value = cid;
+    if(!token){
+        alert("TokenInput não encontrado.");
+        return;
+    }
 
-    campo.dispatchEvent(new Event("input",{
-        bubbles:true
-    }));
+    token.clear();
 
-    campo.dispatchEvent(new KeyboardEvent("keydown",{
-        key: cid.slice(-1),
-        bubbles:true
-    }));
+    token.add({
+        id: cid.replace(/\./g, ""),
+        name: cid.toUpperCase()
+    });
 
-    campo.dispatchEvent(new KeyboardEvent("keyup",{
-        key: cid.slice(-1),
-        bubbles:true
-    }));
-
-    setTimeout(function(){
-
-        const primeiro = document.querySelector(
-            ".token-input-dropdown-celk li"
-        );
-
-        if(primeiro){
-
-            primeiro.click();
-
-        }else{
-
-            alert("Resultado do CID não apareceu.");
-
-        }
-
-    },700);
-
+};
 }
 
 
