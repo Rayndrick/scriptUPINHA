@@ -717,62 +717,35 @@ function clicarPesquisar(){
 // INICIALIZA
 //--------------------------------------------------
     iniciarReceituario();
+
 function iniciarObserver(){
 
-    let timerObserver;
-
-const observer = new MutationObserver(() => {
-
-    clearTimeout(timerObserver);
-
-    timerObserver = setTimeout(() => {
+    setInterval(function(){
 
         if(
-    !window.celkHelperBar ||
-    !document.body.contains(window.celkHelperBar)
-){
-    criarInterface();
-}
-
-if(
-    !window.celkReceita ||
-    !document.body.contains(window.celkReceita)
-){
-    criarCampoPrescricao();
-}
-
-    },150);
-
-});
-
-function iniciarObserver(){
-
-    setInterval(() => {
-
-        if (!document.getElementById("celk-helper")) {
-
-            console.log("Reconstruindo barra...");
-
+            !window.celkHelperBar ||
+            !document.body.contains(window.celkHelperBar)
+        ){
             criarInterface();
-
         }
 
-        if (
+        if(
             typeof tinymce !== "undefined" &&
             tinymce.activeEditor &&
-            !document.getElementById("celk-prescricao-ped")
-        ) {
-
-            console.log("Reconstruindo prescrição...");
-
+            (
+                !window.celkReceita ||
+                !document.body.contains(window.celkReceita)
+            )
+        ){
             criarCampoPrescricao();
-
         }
 
     },300);
+
+}
+
 iniciar();
 iniciarObserver();
-}
 
 //--------------------------------------------------
     //--------------------------------------------------
