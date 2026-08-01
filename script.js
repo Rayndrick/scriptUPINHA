@@ -260,33 +260,52 @@ cid.onclick=abrirMenuCID;
         bubbles:true
     }));
 
-   setTimeout(()=>{
+ setTimeout(() => {
 
-    const item = document.querySelector(
-        ".token-input-dropdown-celk li"
-    );
+    const lista = document.querySelector(".token-input-dropdown-celk");
 
-    if(item){
-
-        item.dispatchEvent(new MouseEvent("mousedown",{
-            bubbles:true
-        }));
-
-        item.dispatchEvent(new MouseEvent("mouseup",{
-            bubbles:true
-        }));
-
-        item.dispatchEvent(new MouseEvent("click",{
-            bubbles:true
-        }));
-
-    }else{
+    if (!lista) {
 
         alert("Resultado do CID não apareceu.");
+        return;
 
     }
 
-},400);
+    campo.focus();
+
+    campo.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        keyCode: 40,
+        which: 40,
+        bubbles: true
+    }));
+
+    campo.dispatchEvent(new KeyboardEvent("keyup", {
+        key: "ArrowDown",
+        keyCode: 40,
+        which: 40,
+        bubbles: true
+    }));
+
+    setTimeout(() => {
+
+        campo.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "Enter",
+            keyCode: 13,
+            which: 13,
+            bubbles: true
+        }));
+
+        campo.dispatchEvent(new KeyboardEvent("keyup", {
+            key: "Enter",
+            keyCode: 13,
+            which: 13,
+            bubbles: true
+        }));
+
+    },150);
+
+},500);
 
 }
 
