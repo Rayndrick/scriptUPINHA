@@ -2,15 +2,11 @@
 
 'use strict';
 
-if(window.celkHelperLoaded){
-
-    console.log("CELK Helper já iniciado.");
-
-}else{
-
-    window.celkHelperLoaded = true;
-
+if (window.celkHelperLoaded) {
+    return;
 }
+
+window.celkHelperLoaded = true;
     const CONFIG = {
 
     refreshSeconds: Number(
@@ -51,6 +47,7 @@ function criarInterface(){
     const barra=document.createElement("div");
 
     barra.id="celk-helper";
+    window.celkHelperBar = barra;
 
   barra.style.cssText=`
 width:100%;
@@ -722,24 +719,41 @@ function clicarPesquisar(){
     iniciarReceituario();
 function iniciarObserver(){
 
-    const observer = new MutationObserver(() => {
+    let timerObserver;
 
-        // recria a barra se ela sumiu
-        if(!document.getElementById("celk-helper")){
-            criarInterface();
-        }
+const observer = new MutationObserver(() => {
 
-        // recria o campo de prescrição
-        criarCampoPrescricao();
+    clearTimeout(timerObserver);
 
-    });
+    timerObserver = setTimeout(() => {
 
-    observer.observe(document.body,{
+        if(
+    !window.celkHelperBar ||
+    !document.body.contains(window.celkHelperBar)
+){
+    criarInterface();
+}
 
-        childList:true,
-        subtree:true
+if(
+    !window.celkReceita ||
+    !document.body.contains(window.celkReceita)
+){
+    criarCampoPrescricao();
+}
 
-    });
+    },150);
+
+});
+
+const alvo =
+    document.querySelector("#content") ||
+    document.querySelector("#main") ||
+    document.body;
+
+observer.observe(alvo,{
+    childList:true,
+    subtree:true
+});
 
 }
 
@@ -753,7 +767,7 @@ iniciarObserver();
 
 function iniciarReceituario(){
 
-    setInterval(criarCampoPrescricao,1000);
+    criarCampoPrescricao();
 
 }
 
@@ -777,6 +791,7 @@ function criarCampoPrescricao(){
     }
 
     const barra=document.createElement("div");
+    window.celkReceita = barra;
 
     barra.id="celk-prescricao-ped";
 
