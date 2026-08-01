@@ -745,20 +745,33 @@ if(
 
 });
 
-const alvo =
-    document.querySelector("#content") ||
-    document.querySelector("#main") ||
-    document.body;
+function iniciarObserver(){
 
-observer.observe(alvo,{
-    childList:true,
-    subtree:true
-});
+    setInterval(() => {
+
+        if (!document.getElementById("celk-helper")) {
+
+            console.log("Reconstruindo barra...");
+
+            criarInterface();
+
+        }
+
+        if (
+            typeof tinymce !== "undefined" &&
+            tinymce.activeEditor &&
+            !document.getElementById("celk-prescricao-ped")
+        ) {
+
+            console.log("Reconstruindo prescrição...");
+
+            criarCampoPrescricao();
+
+        }
+
+    },300);
 
 }
-
-iniciar();
-iniciarObserver();
 
 //--------------------------------------------------
     //--------------------------------------------------
