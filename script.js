@@ -235,15 +235,15 @@ cid.onmouseout=function(){
 };
 
 cid.onclick=abrirMenuCID;
-    function preencherCID(cid){
+   function preencherCID(cid){
 
     const campo = document.querySelector(
-        "input[name*='diagnost'], input[id*='diagnost'], input[name*='cid'], input[id*='cid']"
+        ".token-input-input-token-celk input"
     );
 
     if(!campo){
 
-        alert("Campo Diagnóstico não encontrado.");
+        alert("Campo CID não encontrado.");
 
         return;
 
@@ -251,13 +251,32 @@ cid.onclick=abrirMenuCID;
 
     campo.focus();
 
-    campo.value = cid;
+    campo.value = cid.replace(".","");
 
     campo.dispatchEvent(new Event("input",{bubbles:true}));
 
-    campo.dispatchEvent(new Event("change",{bubbles:true}));
+    campo.dispatchEvent(new KeyboardEvent("keyup",{
+        key:cid.slice(-1),
+        bubbles:true
+    }));
 
-    campo.dispatchEvent(new KeyboardEvent("keyup",{bubbles:true}));
+    setTimeout(()=>{
+
+        const item=document.querySelector(
+            ".token-input-dropdown-celk li"
+        );
+
+        if(item){
+
+            item.click();
+
+        }else{
+
+            alert("Resultado do CID não apareceu.");
+
+        }
+
+    },400);
 
 }
 
