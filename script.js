@@ -260,23 +260,33 @@ cid.onclick=abrirMenuCID;
         bubbles:true
     }));
 
-    setTimeout(()=>{
+   setTimeout(()=>{
 
-        const item=document.querySelector(
-            ".token-input-dropdown-celk li"
-        );
+    const item = document.querySelector(
+        ".token-input-dropdown-celk li"
+    );
 
-        if(item){
+    if(item){
 
-            item.click();
+        item.dispatchEvent(new MouseEvent("mousedown",{
+            bubbles:true
+        }));
 
-        }else{
+        item.dispatchEvent(new MouseEvent("mouseup",{
+            bubbles:true
+        }));
 
-            alert("Resultado do CID não apareceu.");
+        item.dispatchEvent(new MouseEvent("click",{
+            bubbles:true
+        }));
 
-        }
+    }else{
 
-    },400);
+        alert("Resultado do CID não apareceu.");
+
+    }
+
+},400);
 
 }
 
