@@ -34,8 +34,19 @@ function iniciar(){
 
     criarInterface();
 
-}
+    setInterval(function(){
 
+        if(
+            !document.getElementById("celk-helper")
+        ){
+            console.log("Barra recriada.");
+
+            criarInterface();
+        }
+
+    },1000);
+
+}
 //--------------------------------------------------
 // INTERFACE
 //--------------------------------------------------
