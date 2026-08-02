@@ -1266,16 +1266,19 @@ function inserirNoEditor(texto){
 
     if(typeof tinymce==="undefined") return;
 
-    const editor=tinymce.activeEditor;
+    const editor = tinymce.activeEditor;
 
     if(!editor) return;
 
     editor.focus();
 
-    editor.insertContent(texto);
+    editor.execCommand(
+        "mceInsertContent",
+        false,
+        texto
+    );
 
 }
-
 
    //--------------------------------------------------
 // BANCO DE MEDICAMENTOS
