@@ -1058,7 +1058,7 @@ function clicarPesquisar(){
 // INICIALIZA
 //--------------------------------------------------
 
-iniciarReceituario();
+// iniciarReceituario();
 
 function iniciarObserver(){
 
@@ -1106,6 +1106,7 @@ function iniciarObserver(){
 iniciar();
 
 iniciarObserver();
+    setTimeout(iniciarReceituario, 1500);
 
 //--------------------------------------------------
     //--------------------------------------------------
