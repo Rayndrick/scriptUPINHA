@@ -2,11 +2,22 @@
 
 'use strict';
 
-if (window.celkHelperLoaded) {
+window.celk = window.celk || {};
+
+window.celk.version = "1.0";
+
+if (window.celk.running) {
+
+    console.log("CELK Helper já carregado.");
+
+    if (typeof window.celk.init === "function") {
+        window.celk.init();
+    }
+
     return;
 }
 
-window.celkHelperLoaded = true;
+window.celk.running = true;
     const CONFIG = {
 
     refreshSeconds: Number(
@@ -30,23 +41,25 @@ let refreshTimer=null;
 // INICIAR
 //--------------------------------------------------
 
-function iniciar(){
+window.celk.init = function(){
 
     criarInterface();
 
-    setInterval(function(){
+    if(window.celk.intervalo) return;
 
-        if(
-            !document.getElementById("celk-helper")
-        ){
+    window.celk.intervalo = setInterval(function(){
+
+        if(!document.getElementById("celk-helper")){
+
             console.log("Barra recriada.");
 
             criarInterface();
+
         }
 
     },1000);
 
-}
+};
 //--------------------------------------------------
 // INTERFACE
 //--------------------------------------------------
@@ -1114,10 +1127,17 @@ function iniciarObserver(){
 
 }
 
-iniciar();
+window.celk.init = function(){
 
-iniciarObserver();
-    setTimeout(iniciarReceituario, 1500);
+    criarInterface();
+
+    iniciarObserver();
+
+    setTimeout(iniciarReceituario,1500);
+
+};
+
+window.celk.init();
 
 //--------------------------------------------------
     //--------------------------------------------------
