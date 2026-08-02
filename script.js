@@ -1890,6 +1890,21 @@ function inserirNoEditor(texto){
                              }
 
             };
+    function buscarMedicamento(texto){
+
+    texto = texto.trim().toLowerCase();
+
+    for(const med of Object.values(PED_MEDS)){
+
+        if(med.aliases.some(a => a.toLowerCase() === texto)){
+            return med;
+        }
+
+    }
+
+    return null;
+
+}
 
 })();
 
