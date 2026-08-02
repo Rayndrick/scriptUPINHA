@@ -1087,7 +1087,7 @@ function iniciarObserver(){
     criarCampoPrescricao();
 }
 
-        },150);
+        },500);
 
     });
 
@@ -1100,28 +1100,6 @@ function iniciarObserver(){
         childList:true,
         subtree:true
     });
-
-    setInterval(() => {
-
-        if(
-            !window.celkHelperBar ||
-            !document.body.contains(window.celkHelperBar)
-        ){
-            criarInterface();
-        }
-
-        if(
-            typeof tinymce !== "undefined" &&
-            tinymce.activeEditor &&
-            (
-                !window.celkReceita ||
-                !document.body.contains(window.celkReceita)
-            )
-        ){
-            criarCampoPrescricao();
-        }
-
-    },300);
 
 }
 
