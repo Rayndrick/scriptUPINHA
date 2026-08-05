@@ -556,20 +556,38 @@ function preencherEvolucao(){
 
     const tela=document.body.innerText;
 
-    let alergia = "NEGA";
+   let alergia = "NEGA";
 
 const mAlergia = tela.match(
     /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
 );
 
-if(mAlergia){
+if (mAlergia) {
 
-    const valor = mAlergia[1].trim();
+    const valor = mAlergia[1]
+        .trim()
+        .replace(/\.+$/, "");
 
-    if(
-        valor &&
-        !/^(NEGA|NENHUMA|NÃO|NAO)$/i.test(valor)
-    ){
+    const invalidos = [
+        "",
+        ".",
+        "-",
+        "--",
+        "ANOTAÇÕES",
+        "ANOTAÇÕES",
+        "OBSERVAÇÕES",
+        "OBSERVACOES",
+        "NÃO INFORMADO",
+        "NAO INFORMADO",
+        "SEM INFORMAÇÃO",
+        "SEM INFORMAÇÃO",
+        "SEM INFORMACOES",
+        "SEM INFORMAÇÕES",
+        "NENHUMA",
+        "NEGA"
+    ];
+
+    if (!invalidos.includes(valor.toUpperCase())) {
         alergia = valor;
     }
 
