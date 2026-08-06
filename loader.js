@@ -1,100 +1,133 @@
 (function () {
 
-    "use strict";
+"use strict";
 
-    const SCRIPT_URL =
-        "https://raw.githubusercontent.com/Rayndrick/scriptUPINHA/main/script.js";
+const LINKS = [
+    "https://raw.githubusercontent.com/Rayndrick/scriptUPINHA/main/script.js"
+];
 
-    const CACHE_KEY = "celk-helper-cache";
-    const CACHE_TIME = 1000 * 60 * 60 * 6; // 6 horas
+const CACHE_KEY = "fetcher:" + btoa(LINKS.join("|"));
+const CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 11;
 
-    async function baixarScript() {
+function run(code, link){
 
-        const res = await fetch(
-            SCRIPT_URL + "?v=" + Date.now(),
-            { cache: "no-store" }
-        );
+    console.log("[CELK] Executando", link);
 
-        if (!res.ok)
-            throw new Error("Erro " + res.status);
+    const s = document.createElement("script");
+    s.textContent = code;
+    document.documentElement.appendChild(s);
+    s.remove();
 
-        return await res.text();
+}
+
+function readCache(storage){
+
+    try{
+
+        const raw = storage.getItem(CACHE_KEY);
+
+        if(!raw) return null;
+
+        return JSON.parse(raw);
+
+    }catch{
+
+        return null;
+
     }
 
-    function salvarCache(codigo) {
+}
+
+function writeCache(code, link){
+
+    const payload = {
+
+        code,
+        link,
+        savedAt: Date.now()
+
+    };
+
+    try{
 
         localStorage.setItem(
             CACHE_KEY,
-            JSON.stringify({
-                data: Date.now(),
-                codigo
-            })
+            JSON.stringify(payload)
         );
 
-    }
+    }catch{}
 
-    function lerCache() {
+}
 
-        try {
+function cacheExpired(c){
 
-            const obj = JSON.parse(
-                localStorage.getItem(CACHE_KEY)
-            );
+    if(!c) return true;
 
-            if (!obj)
-                return null;
+    return Date.now()-c.savedAt > CACHE_MAX_AGE_MS;
 
-            if (Date.now() - obj.data > CACHE_TIME)
-                return null;
+}
 
-            return obj.codigo;
+async function fetchFresh(){
 
-        } catch {
+    for(const link of LINKS){
 
-            return null;
+        const r = await fetch(
+            link + "?v=" + Date.now(),
+            {cache:"no-store"}
+        );
 
-        }
+        if(!r.ok) continue;
 
-    }
+        const code = await r.text();
 
-    function executar(codigo) {
+        writeCache(code,link);
 
-        new Function(codigo)();
+        run(code,link);
 
-    }
-
-    async function iniciar() {
-
-        try {
-
-            const cache = lerCache();
-
-            if (cache) {
-
-                console.log("CELK Helper: usando cache");
-
-                executar(cache);
-
-            }
-
-            const codigo = await baixarScript();
-
-            salvarCache(codigo);
-
-            executar(codigo);
-
-        }
-
-        catch (e) {
-
-            console.error(e);
-
-            alert("Erro ao carregar CELK Helper");
-
-        }
+        return;
 
     }
 
-    iniciar();
+}
+
+async function load(){
+
+    const cache =
+        readCache(localStorage) ||
+        readCache(sessionStorage);
+
+    if(cache && !cacheExpired(cache)){
+
+        run(cache.code,cache.link);
+
+    }
+
+    try{
+
+        await fetchFresh();
+
+    }catch(e){
+
+        console.error(e);
+
+    }
+
+}
+
+window.fetcher = {
+
+    load,
+
+    refresh:fetchFresh,
+
+    info(){
+
+        console.log(readCache(localStorage));
+
+    }
+
+};
+
+load();
 
 })();
