@@ -1088,50 +1088,46 @@ function clicarPesquisar(){
 
 // iniciarReceituario();
 
+let observerCELK = null;
+
 function iniciarObserver(){
 
-    let timerObserver;
-
-    const observer = new MutationObserver(() => {
-
-        clearTimeout(timerObserver);
-
-        timerObserver = setTimeout(() => {
-
-            if(
-                !window.celkHelperBar ||
-                !document.body.contains(window.celkHelperBar)
-            ){
-                console.log("Reconstruindo barra...");
-                criarInterface();
-            }
-
-           if(
-    typeof tinymce !== "undefined" &&
-    tinymce.activeEditor &&
-    !document.getElementById("celk-prescricao-ped")
-){
-    console.log("Reconstruindo prescrição...");
-    criarCampoPrescricao();
-}
-
-        },500);
-
-    });
+    if(observerCELK){
+        observerCELK.disconnect();
+    }
 
     const alvo =
+        document.querySelector("#wrapper .container .content") ||
         document.querySelector("#content") ||
         document.querySelector("#main") ||
         document.body;
 
-    observer.observe(alvo,{
+    observerCELK = new MutationObserver(function(){
+
+        if(!document.getElementById("celk-helper")){
+            console.log("Reconstruindo barra...");
+            criarInterface();
+        }
+
+        if(
+            typeof tinymce !== "undefined" &&
+            tinymce.activeEditor &&
+            !document.getElementById("celk-prescricao-ped")
+        ){
+            console.log("Reconstruindo prescrição...");
+            criarCampoPrescricao();
+        }
+
+    });
+
+    observerCELK.observe(alvo,{
         childList:true,
         subtree:true
     });
 
 }
 
-window.celk.init = function(){
+    window.celk.init = function(){
 
     criarInterface();
 
@@ -1143,7 +1139,6 @@ window.celk.init = function(){
 
 window.celk.init();
 
-//--------------------------------------------------
     //--------------------------------------------------
 // RECEITUÁRIO PEDIÁTRICO
 //--------------------------------------------------
