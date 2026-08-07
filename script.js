@@ -784,6 +784,7 @@ const lista = [
 {cid:"R10.4", nome:"Dor Abdominal"},
 {cid:"J00", nome:"Resfriado Comum"},
 {cid:"Z00.1", nome:"Consulta de Rotina"},
+
 {cid:"R64.8", nome:"Mal-estar Geral"},
 {cid:"M54.5", nome:"Lombalgia"},
 {cid:"Z00.0", nome:"Exame Médico Geral (Adulto)"}
