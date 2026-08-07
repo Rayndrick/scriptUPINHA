@@ -311,9 +311,17 @@ z-index:99999999;
 `;
 
 menu.innerHTML=`
-<div style="font-size:17px;font-weight:bold;margin-bottom:10px">
-Atualização
+<div style="display:flex;gap:8px;align-items:center;">
+    <input
+        id="celkTempo"
+        type="number"
+        min="0"
+        value="${CONFIG.refreshSeconds}"
+        style="width:60px;padding:4px;">
+    <button id="celkAgora">Iniciar</button>
+    <button id="celkParar">Parar</button>
 </div>
+`;
 
 <div style="margin-bottom:10px">
 Tempo:
