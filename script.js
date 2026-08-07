@@ -1946,28 +1946,29 @@ function inserirNoEditor(texto){
 
     setInterval(() => {
 
-    if(typeof tinymce === "undefined" || !tinymce.activeEditor) return;
+    if(typeof tinymce==="undefined" || !tinymce.activeEditor) return;
 
-    const container = tinymce.activeEditor.getContainer();
+    const c = tinymce.activeEditor.getContainer();
 
-    if(container){
+    if(!c) return;
 
-        container.style.height = "800px";
+    // aumenta o editor inteiro
+    c.style.height = "700px";
 
-        const iframe = container.querySelector("iframe");
-
-        if(iframe){
-            iframe.style.height = "730px";
+    // aumenta a área de edição
+    c.querySelectorAll("*").forEach(el=>{
+        if(el.className.includes("mce") || el.className.includes("tox")){
+            el.style.height = "700px";
         }
+    });
 
-        const area = container.querySelector(".tox-edit-area");
-
-        if(area){
-            area.style.height = "730px";
-        }
-
+    const iframe = c.querySelector("iframe");
+    if(iframe){
+        iframe.style.height = "650px";
     }
 
 },1000);
+
+    }
     
 })();
