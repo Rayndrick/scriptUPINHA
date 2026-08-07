@@ -92,7 +92,90 @@ font-size:16px;
 
 box-shadow:0 2px 6px rgba(0,0,0,.15);
 `;
+//--------------------------------------------------
+// BOTÃO ATENDIMENTO
+//--------------------------------------------------
 
+const atendimento=document.createElement("button");
+
+atendimento.innerHTML="🩺 Atendimento";
+
+atendimento.style.cssText=`
+flex:0 0 260px;
+height:100%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:18px;
+font-weight:bold;
+background:transparent;
+color:#222;
+border:none;
+border-right:1px solid #d8d8d8;
+cursor:pointer;
+user-select:none;
+`;
+
+atendimento.onclick=preencherEvolucao;
+
+atendimento.onmouseover=()=>atendimento.style.background="#ececec";
+atendimento.onmouseout=()=>atendimento.style.background="transparent";
+
+//--------------------------------------------------
+// PAINEL
+//--------------------------------------------------
+
+const painel=document.createElement("div");
+
+painel.style.cssText=`
+display:flex;
+align-items:center;
+gap:15px;
+height:100%;
+padding:0 20px;
+background:#f8f8f8;
+flex:1;
+`;
+
+//--------------------------------------------------
+// BOTÃO RELATÓRIO
+//--------------------------------------------------
+
+const relatorio=document.createElement("div");
+
+relatorio.innerHTML="📋 Relatório";
+
+relatorio.style.cssText=`
+display:flex;
+align-items:center;
+justify-content:center;
+height:100%;
+padding:0 28px;
+font-size:18px;
+font-weight:bold;
+color:#222;
+cursor:pointer;
+user-select:none;
+border-left:1px solid #d8d8d8;
+`;
+
+relatorio.onmouseover=()=>relatorio.style.background="#ececec";
+relatorio.onmouseout=()=>relatorio.style.background="transparent";
+relatorio.onclick=abrirRelatorio;
+
+//--------------------------------------------------
+// BOTÃO ATUALIZAR
+//--------------------------------------------------
+
+const atualizar=document.createElement("div");
+
+atualizar.innerHTML="🔄 Atualizar";
+
+atualizar.style.cssText=relatorio.style.cssText;
+
+atualizar.onmouseover=()=>atualizar.style.background="#ececec";
+atualizar.onmouseout=()=>atualizar.style.background="transparent";
+    
    //--------------------------------------------------
 // BOTÃO CID
 //--------------------------------------------------
@@ -1859,6 +1942,15 @@ function abrirJanelaSepse(){
         fundo.remove();
 
     };
+
+}
+    //--------------------------------------------------
+// SEPSE
+//--------------------------------------------------
+
+function abrirJanelaSepse(){
+
+    alert("SEPSE - funcionando!");
 
 }
 
