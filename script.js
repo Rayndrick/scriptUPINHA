@@ -2,11 +2,22 @@
 
 'use strict';
 
-if (window.celkHelperLoaded) {
+window.celk = window.celk || {};
+
+window.celk.version = "1.0";
+
+if (window.celk.running) {
+
+    console.log("CELK Helper já carregado.");
+
+    if (typeof window.celk.init === "function") {
+        window.celk.init();
+    }
+
     return;
 }
 
-window.celkHelperLoaded = true;
+window.celk.running = true;
     const CONFIG = {
 
     refreshSeconds: Number(
@@ -30,12 +41,25 @@ let refreshTimer=null;
 // INICIAR
 //--------------------------------------------------
 
-function iniciar(){
+window.celk.init = function(){
 
     criarInterface();
 
-}
+    if(window.celk.intervalo) return;
 
+    window.celk.intervalo = setInterval(function(){
+
+        if(!document.getElementById("celk-helper")){
+
+            console.log("Barra recriada.");
+
+            criarInterface();
+
+        }
+
+    },1000);
+
+};
 //--------------------------------------------------
 // INTERFACE
 //--------------------------------------------------
@@ -197,10 +221,181 @@ atualizar.onmouseout=function(){
     atualizar.style.background="transparent";
 };
 
+//--------------------------------------------------
+// BOTÃO CID
+//--------------------------------------------------
 
+const cid=document.createElement("div");
 
+cid.innerHTML="📋 CID";
+
+cid.style.cssText=`
+display:flex;
+align-items:center;
+justify-content:center;
+
+height:100%;
+
+padding:0 28px;
+
+font-size:18px;
+font-weight:bold;
+
+color:#222;
+
+cursor:pointer;
+
+user-select:none;
+
+border-left:1px solid #d8d8d8;
+`;
+
+cid.onmouseover=function(){
+    cid.style.background="#ececec";
+};
+
+cid.onmouseout=function(){
+    cid.style.background="transparent";
+};
+
+cid.onclick=abrirMenuCID;
+window.preencherCID = function(cid){
+
+    const campo = document.querySelector(
+        'input[name*="cid:descricao:textField"]'
+    );
+
+    if(!campo){
+        alert("Campo CID não encontrado.");
+        return;
+    }
+
+    const dados = $(campo).data();
+
+    if(!dados || !dados.tokenInputObject){
+        alert("TokenInput não encontrado.");
+        return;
+    }
+
+    const token = dados.tokenInputObject;
+
+    token.clear();
+
+    const item = {
+        id: cid.replace(/\./g,""),
+        name: "( " + cid.replace(/\./g,"") + " ) " + cid
+    };
+
+    token.add(item);
+
+    if(typeof dados.settings.onAdd === "function"){
+    dados.settings.onAdd(item);
+}
+
+setTimeout(() => {
+
+    // MÉDICO
+    const select = document.querySelector(
+        'select[name*="profissional"]'
+    );
+
+   if (select) {
+
+    select.value = "96829844";
+
+    select.dispatchEvent(new Event("change", {
+        bubbles: true
+    }));
+
+}
+
+atualizarCamposAlta();
+
+    // MOTIVO = MELHORADO
+    const motivo = document.querySelector(
+        'select[name*="motivo"]'
+    );
+
+    if (motivo) {
+
+        const op = [...motivo.options].find(o =>
+            o.text.trim().toUpperCase() === "MELHORADO"
+        );
+
+        if (op) {
+
+            motivo.value = op.value;
+
+            motivo.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+        }
+    }
+
+       // CLASSIFICAÇÃO = OUTROS
+    const classificacao = document.querySelector(
+        'select[name*="classificacaoAtendimento"]'
+    );
+
+    if (classificacao) {
+
+        const op = [...classificacao.options].find(o =>
+            o.text.trim().toUpperCase() === "OUTROS"
+        );
+
+        if (op) {
+
+            classificacao.value = op.value;
+
+            classificacao.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+
+        }
+
+    }
+
+}, 500);
+
+};
+
+function selecionarOpcao(select, texto){
+
+    if(!select) return;
+
+    const op = [...select.options].find(o =>
+        o.text.trim().toUpperCase() === texto.toUpperCase()
+    );
+
+    if(op){
+
+        select.value = op.value;
+
+        select.dispatchEvent(new Event("change",{
+            bubbles:true
+        }));
+
+    }
+
+}
+function atualizarCamposAlta(){
+
+    selecionarOpcao(
+        document.querySelector('select[name*="motivo"]'),
+        "OUTROS"
+    );
+
+    selecionarOpcao(
+        document.querySelector('select[name*="classificacaoAtendimento"]'),
+        "MELHORADO"
+    );
+
+}
 painel.appendChild(relatorio);
+painel.appendChild(cid);
 painel.appendChild(atualizar);
+    
+
 barra.appendChild(atendimento);
 barra.appendChild(painel);
 
@@ -361,20 +556,24 @@ function preencherEvolucao(){
 
     const tela=document.body.innerText;
 
-    let alergia = "NEGA";
+let alergia = "NEGA";
 
 const mAlergia = tela.match(
     /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
 );
 
-if(mAlergia){
+if (mAlergia) {
 
-    const valor = mAlergia[1].trim();
+    let valor = mAlergia[1]
+        .replace(/\[\+\]/g, "")
+        .replace(/\[-\]/g, "")
+        .replace(/\./g, "")
+        .trim();
 
-    if(
+    if (
         valor &&
-        !/^(NEGA|NENHUMA|NÃO|NAO)$/i.test(valor)
-    ){
+        !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
+    ) {
         alergia = valor;
     }
 
@@ -563,6 +762,177 @@ function adicionarRelatorio(nome, idade, chegada){
     console.log("Paciente salvo:", nome);
 
 }
+function abrirMenuCID(){
+
+    if(document.getElementById("celk-cid-menu")){
+        document.getElementById("celk-cid-menu").remove();
+        return;
+    }
+
+const lista = [
+
+    {cid:"J06.9", nome:"IVAS"},
+{cid:"J02.9", nome:"Faringite"},
+{cid:"J03.9", nome:"Amigdalite"},
+{cid:"H66.9", nome:"Otite Média"},
+{cid:"A09", nome:"Gastroenterite"},
+{cid:"B34.9", nome:"Virose"},
+{cid:"R50", nome:"Febre"},
+{cid:"J45", nome:"Asma"},
+{cid:"L20.9", nome:"Dermatite"},
+{cid:"K59.0", nome:"Constipação"},
+{cid:"R10.4", nome:"Dor Abdominal"},
+{cid:"J00", nome:"Resfriado Comum"},
+{cid:"Z00.1", nome:"Consulta de Rotina"},
+{cid:"R64.8", nome:"Mal-estar Geral"},
+{cid:"M54.5", nome:"Lombalgia"},
+{cid:"Z00.0", nome:"Exame Médico Geral (Adulto)"}
+
+];
+
+    const fundo=document.createElement("div");
+    fundo.id="celk-cid-menu";
+
+    fundo.style.position="fixed";
+    fundo.style.left="0";
+    fundo.style.top="0";
+    fundo.style.width="100%";
+    fundo.style.height="100%";
+    fundo.style.background="rgba(0,0,0,.35)";
+    fundo.style.zIndex="999999";
+
+    const caixa=document.createElement("div");
+
+    caixa.style.position="absolute";
+    caixa.style.left="50%";
+    caixa.style.top="50%";
+    caixa.style.transform="translate(-50%,-50%)";
+    caixa.style.width="420px";
+    caixa.style.maxHeight="600px";
+    caixa.style.background="#fff";
+    caixa.style.borderRadius="8px";
+    caixa.style.boxShadow="0 0 20px rgba(0,0,0,.3)";
+    caixa.style.padding="15px";
+    caixa.style.overflow="auto";
+
+    caixa.innerHTML=`
+        <h2 style="margin-top:0">
+            CID FAVORITOS
+        </h2>
+
+        <input
+            id="celk-cid-pesquisa"
+            placeholder="Pesquisar..."
+            style="
+                width:100%;
+                padding:8px;
+                margin-bottom:12px;
+            "
+        >
+
+        <div id="celk-cid-lista"></div>
+    `;
+
+    fundo.appendChild(caixa);
+
+    document.body.appendChild(fundo);
+
+    const listaDiv=document.getElementById("celk-cid-lista");
+
+    function montar(texto=""){
+
+        listaDiv.innerHTML="";
+
+        lista
+        .filter(x=>
+
+            x.cid.toLowerCase().includes(texto.toLowerCase()) ||
+
+            x.nome.toLowerCase().includes(texto.toLowerCase())
+
+        )
+        .forEach(item=>{
+
+            const b=document.createElement("button");
+
+            b.innerHTML=
+                "<b>"+item.cid+"</b> - "+item.nome;
+
+            b.style.display="block";
+            b.style.width="100%";
+            b.style.marginBottom="6px";
+            b.style.padding="8px";
+            b.style.cursor="pointer";
+            b.style.textAlign="left";
+
+        b.onclick = function(){
+
+    window.preencherCID(item.cid);
+
+    // aguarda o CID ser preenchido
+    setTimeout(function(){
+
+        const nomeMedico = document.querySelector(
+            'label[wicketpath="linkMinhaConta_usuarioLogado"]'
+        )?.textContent.trim();
+
+        const select = document.querySelector(
+            'select[name*="profissional"]'
+        );
+
+        if(nomeMedico && select){
+
+            const opcao = [...select.options].find(o =>
+                o.text.trim().toUpperCase() ===
+                nomeMedico.toUpperCase()
+            );
+
+            if(opcao){
+
+                select.value = opcao.value;
+
+                select.dispatchEvent(new Event("change",{
+                    bubbles:true
+                }));
+
+            }
+
+        }
+
+    },300);
+
+    fundo.remove();
+
+};
+
+            listaDiv.appendChild(b);
+
+        });
+
+    }
+
+    montar();
+
+    document
+        .getElementById("celk-cid-pesquisa")
+        .oninput=function(){
+
+            montar(this.value);
+
+        };
+
+    fundo.onclick=function(e){
+
+        if(e.target===fundo){
+
+            fundo.remove();
+
+        }
+
+    };
+
+}
+
 function abrirRelatorio(){
 
     const pacientes =
@@ -624,11 +994,11 @@ function abrirRelatorio(){
 
     <body>
 
-  <h2>RELATÓRIO DO PLANTÃO</h2>
+    <h2>RELATÓRIO DO PLANTÃO</h2>
 
-<b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
+    <b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
 
-<b>Total de pacientes:</b> ${pacientes.length}
+    <b>Total de pacientes:</b> ${pacientes.length}
 
     <table>
 
@@ -651,7 +1021,7 @@ function abrirRelatorio(){
 
     pacientes.forEach(function(p){
 
-        html+=`
+        html += `
         <tr>
 
         <td>${p.numero}</td>
@@ -671,7 +1041,7 @@ function abrirRelatorio(){
 
     });
 
-    html+=`
+    html += `
     </table>
 
     </body>
@@ -684,6 +1054,7 @@ function abrirRelatorio(){
     aba.document.close();
 
 }
+
 function clicarPesquisar(){
 
     const botoes=[
@@ -717,65 +1088,60 @@ function clicarPesquisar(){
 //--------------------------------------------------
 // INICIALIZA
 //--------------------------------------------------
-    iniciarReceituario();
-function iniciarObserver(){
 
-    let timerObserver;
+// iniciarReceituario();
 
-const observer = new MutationObserver(() => {
-
-    clearTimeout(timerObserver);
-
-    timerObserver = setTimeout(() => {
-
-        if(
-    !window.celkHelperBar ||
-    !document.body.contains(window.celkHelperBar)
-){
-    criarInterface();
-}
-
-if(
-    !window.celkReceita ||
-    !document.body.contains(window.celkReceita)
-){
-    criarCampoPrescricao();
-}
-
-    },150);
-
-});
+let observerCELK = null;
 
 function iniciarObserver(){
 
-    setInterval(() => {
+    if(observerCELK){
+        observerCELK.disconnect();
+    }
 
-        if (!document.getElementById("celk-helper")) {
+    const alvo =
+        document.querySelector("#wrapper .container .content") ||
+        document.querySelector("#content") ||
+        document.querySelector("#main") ||
+        document.body;
 
+    observerCELK = new MutationObserver(function(){
+
+        if(!document.getElementById("celk-helper")){
             console.log("Reconstruindo barra...");
-
             criarInterface();
-
         }
 
-        if (
+        if(
             typeof tinymce !== "undefined" &&
             tinymce.activeEditor &&
             !document.getElementById("celk-prescricao-ped")
-        ) {
-
+        ){
             console.log("Reconstruindo prescrição...");
-
             criarCampoPrescricao();
-
         }
 
-    },300);
-iniciar();
-iniciarObserver();
+    });
+
+    observerCELK.observe(alvo,{
+        childList:true,
+        subtree:true
+    });
+
 }
 
-//--------------------------------------------------
+    window.celk.init = function(){
+
+    criarInterface();
+
+    iniciarObserver();
+
+    setTimeout(iniciarReceituario,1500);
+
+};
+
+window.celk.init();
+
     //--------------------------------------------------
 // RECEITUÁRIO PEDIÁTRICO
 //--------------------------------------------------
@@ -806,8 +1172,9 @@ function criarCampoPrescricao(){
     }
 
     const barra=document.createElement("div");
-    window.celkReceita = barra;
+window.celkReceita = barra;
 
+barra.id = "celk-prescricao-ped";
     barra.id="celk-prescricao-ped";
 
     barra.style.cssText=`
@@ -932,16 +1299,19 @@ function inserirNoEditor(texto){
 
     if(typeof tinymce==="undefined") return;
 
-    const editor=tinymce.activeEditor;
+    const editor = tinymce.activeEditor;
 
     if(!editor) return;
 
     editor.focus();
 
-    editor.insertContent(texto);
+    editor.execCommand(
+        "mceInsertContent",
+        false,
+        texto
+    );
 
 }
-
 
    //--------------------------------------------------
 // BANCO DE MEDICAMENTOS
@@ -1557,7 +1927,20 @@ function inserirNoEditor(texto){
                              }
 
             };
+    function buscarMedicamento(texto){
+
+    texto = texto.trim().toLowerCase();
+
+    for(const med of Object.values(PED_MEDS)){
+
+        if(med.aliases.some(a => a.toLowerCase() === texto)){
+            return med;
+        }
+
+    }
+
+    return null;
+
+}
 
 })();
-
-
