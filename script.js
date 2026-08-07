@@ -1945,3 +1945,5 @@ function inserirNoEditor(texto){
 }
 
 })();
+
+
