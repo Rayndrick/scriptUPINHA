@@ -442,24 +442,28 @@ menu.style.display=
     ?"none"
     :"block";
 
-};// Fecha ao clicar foradocument.addEventListener("click",function(e){
+};
 
-if(menu.style.display==="none") return;
+// Fecha ao clicar fora
+document.addEventListener("click", function(e){
 
-if(
-    !menu.contains(e.target) &&
-    !atualizar.contains(e.target)
-){
-    menu.style.display="none";
-}
+    if(menu.style.display==="none") return;
+
+    if(
+        !menu.contains(e.target) &&
+        !atualizar.contains(e.target)
+    ){
+        menu.style.display="none";
+    }
 
 });
 
-// Fecha com ESCdocument.addEventListener("keydown",function(e){
+// Fecha com ESC
+document.addEventListener("keydown", function(e){
 
-if(e.key==="Escape"){
-    menu.style.display="none";
-}
+    if(e.key==="Escape"){
+        menu.style.display="none";
+    }
 
 });
 
@@ -526,8 +530,10 @@ const idade = cabecalho ? cabecalho[2].trim() : "";
 
 let chegada = "";
 
-const mTriagem = tela.match(/TRIAGEM[\s\S]?([0-9]{2}/[0-9]{2}/[0-9]{4})\s-\s*([0-9]{2}:[0-9]{2})/i);
-
+const mTriagem = tela.match(
+    /TRIAGEM[\s\S]*?([0-9]{2}\/[0-9]{2}\/[0-9]{4})\s*-\s*([0-9]{2}:[0-9]{2})/i
+);
+    
 if(mTriagem){
 
 chegada = mTriagem[2];
