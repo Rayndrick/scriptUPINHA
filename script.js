@@ -1944,5 +1944,4 @@ function inserirNoEditor(texto){
 
 }
 
-    
 })();
