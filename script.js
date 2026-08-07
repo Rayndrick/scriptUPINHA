@@ -646,14 +646,7 @@ if(mTriagem){
 
 - FORNEÇO ATESTADO MÉDICO`;
 
-    tinymce.activeEditor.setContent(
-    texto
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/\n/g,"<br>")
-);
-
+    tinymce.activeEditor.setContent("<pre>"+texto+"</pre>");
 adicionarRelatorio(
     nome,
     idade,
@@ -1144,8 +1137,6 @@ function iniciarObserver(){
     iniciarObserver();
 
     setTimeout(iniciarReceituario,1500);
-
-    setInterval(ajustarEditor,500);
 
 };
 
@@ -1952,38 +1943,7 @@ function inserirNoEditor(texto){
 
 }
 
-    //--------------------------------------------------
-// AUMENTAR EDITOR DA EVOLUÇÃO
-//--------------------------------------------------
-
-function ajustarEditor(){
-
-    if(typeof tinymce==="undefined") return;
-    if(!tinymce.activeEditor) return;
-
-    const ed = tinymce.activeEditor;
-
-    const tbl = ed.getContainer().querySelector("table.mceLayout");
-    const iframe = ed.getContainer().querySelector("iframe");
-    const iframeTd = ed.getContainer().querySelector(".mceIframeContainer");
-
-    if(tbl){
-        tbl.style.width = "700px";
-        tbl.style.height = "650px";
-    }
-
-    if(iframeTd){
-        iframeTd.style.height = "600px";
-    }
-
-    if(iframe){
-        iframe.style.height = "600px";
-    }
-
-    const fieldset = ed.getContainer().closest("fieldset");
-    if(fieldset){
-        fieldset.style.height = "760px";
-    }
-}
-
 })();
+
+
+
