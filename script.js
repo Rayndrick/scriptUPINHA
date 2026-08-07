@@ -783,7 +783,10 @@ const lista = [
     {cid:"K59.0", nome:"Constipação"},
     {cid:"R10.4", nome:"Dor Abdominal"},
     {cid:"J00", nome:"Resfriado Comum"},
-    {cid:"Z00.1", nome:"Consulta de Rotina"}
+    {cid:"Z00.1", nome:"Consulta de Rotina"},
+    {cid:"M54.5", nome:"Dorsalgia"},
+    {cid:"R68.8", nome:"Outros Sintomas e Sinais Gerais Especificados"},
+    {cid:"Z00.0", nome:"Exame Médico Geral (Adulto)"}
 
 ];
 
