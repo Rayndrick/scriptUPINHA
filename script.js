@@ -646,11 +646,15 @@ if(mTriagem){
 
 - FORNEÇO ATESTADO MÉDICO`;
 
-tinymce.activeEditor.setContent(
-    "<div style='white-space:pre-wrap;word-break:break-word;font-family:monospace;'>"+
-    texto+
-    "</div>"
-);adicionarRelatorio(
+    tinymce.activeEditor.setContent(
+    texto
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/\n/g,"<br>")
+);
+
+adicionarRelatorio(
     nome,
     idade,
     chegada
