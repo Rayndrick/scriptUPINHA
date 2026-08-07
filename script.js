@@ -151,6 +151,11 @@ sepse.onmouseout=function(){
 };
 
 sepse.onclick=abrirJanelaSepse;
+    function abrirJanelaSepse(){
+
+    alert("SEPSE");
+
+}
 
 function selecionarOpcao(select, texto){
 
@@ -186,6 +191,7 @@ function atualizarCamposAlta(){
 }
 painel.appendChild(relatorio);
 painel.appendChild(cid);
+painel.appendChild(sepse);
 painel.appendChild(atualizar);
     
 
@@ -1733,6 +1739,126 @@ function inserirNoEditor(texto){
     }
 
     return null;
+
+}
+    //--------------------------------------------------
+// SEPSE
+//--------------------------------------------------
+
+function abrirJanelaSepse(){
+
+    if(document.getElementById("celk-sepse")){
+        return;
+    }
+
+    const fundo=document.createElement("div");
+
+    fundo.id="celk-sepse";
+
+    fundo.style.cssText=`
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.35);
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        z-index:999999999;
+    `;
+
+    const caixa=document.createElement("div");
+
+    caixa.style.cssText=`
+        width:760px;
+        background:#fff;
+        border-radius:8px;
+        overflow:hidden;
+        box-shadow:0 8px 25px rgba(0,0,0,.30);
+        font-family:Segoe UI,Arial;
+    `;
+
+    caixa.innerHTML=`
+
+    <div style="
+        background:#1976d2;
+        color:#fff;
+        padding:14px 20px;
+        font-size:22px;
+        font-weight:bold;
+    ">
+        🦠 SEPSE
+    </div>
+
+    <div style="padding:20px;">
+
+        <div style="
+            display:grid;
+            grid-template-columns:repeat(5,1fr);
+            gap:15px;
+        ">
+
+            <div>
+                <label>PAS</label>
+                <input id="sepsePAS" type="number" style="width:100%;">
+            </div>
+
+            <div>
+                <label>FC</label>
+                <input id="sepseFC" type="number" style="width:100%;">
+            </div>
+
+            <div>
+                <label>FR</label>
+                <input id="sepseFR" type="number" style="width:100%;">
+            </div>
+
+            <div>
+                <label>TEMP</label>
+                <input id="sepseTEMP" type="number" step="0.1" style="width:100%;">
+            </div>
+
+            <div>
+                <label>SAT</label>
+                <input id="sepseSAT" type="number" style="width:100%;">
+            </div>
+
+        </div>
+
+        <div id="sepseResultado"
+             style="
+                margin-top:25px;
+                text-align:center;
+                font-size:28px;
+                font-weight:bold;
+            ">
+            NEWS 0
+        </div>
+
+    </div>
+
+    <div style="
+        padding:15px;
+        border-top:1px solid #ddd;
+        display:flex;
+        justify-content:flex-end;
+    ">
+
+        <button id="sepseFechar">
+            Fechar
+        </button>
+
+    </div>
+
+    `;
+
+    fundo.appendChild(caixa);
+
+    document.body.appendChild(fundo);
+
+    document.getElementById("sepseFechar").onclick=function(){
+
+        fundo.remove();
+
+    };
 
 }
 
