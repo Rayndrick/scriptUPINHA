@@ -1944,31 +1944,5 @@ function inserirNoEditor(texto){
 
 }
 
-    setInterval(() => {
-
-    if(typeof tinymce==="undefined" || !tinymce.activeEditor) return;
-
-    const c = tinymce.activeEditor.getContainer();
-
-    if(!c) return;
-
-    // aumenta o editor inteiro
-    c.style.height = "700px";
-
-    // aumenta a área de edição
-    c.querySelectorAll("*").forEach(el=>{
-        if(el.className.includes("mce") || el.className.includes("tox")){
-            el.style.height = "700px";
-        }
-    });
-
-    const iframe = c.querySelector("iframe");
-    if(iframe){
-        iframe.style.height = "650px";
-    }
-
-},1000);
-
-    }
     
 })();
