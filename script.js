@@ -1944,4 +1944,30 @@ function inserirNoEditor(texto){
 
 }
 
+    setInterval(() => {
+
+    if(typeof tinymce === "undefined" || !tinymce.activeEditor) return;
+
+    const container = tinymce.activeEditor.getContainer();
+
+    if(container){
+
+        container.style.height = "800px";
+
+        const iframe = container.querySelector("iframe");
+
+        if(iframe){
+            iframe.style.height = "730px";
+        }
+
+        const area = container.querySelector(".tox-edit-area");
+
+        if(area){
+            area.style.height = "730px";
+        }
+
+    }
+
+},1000);
+    
 })();
