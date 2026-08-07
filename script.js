@@ -93,135 +93,7 @@ font-size:16px;
 box-shadow:0 2px 6px rgba(0,0,0,.15);
 `;
 
-    //--------------------------------------------------
-// BOTÃO ATENDIMENTO
-//--------------------------------------------------
-
-const atendimento = document.createElement("button");
-
-atendimento.innerHTML = "🩺 Atendimento";
-
-atendimento.style.cssText=`
-flex:0 0 260px;
-
-height:100%;
-
-display:flex;
-align-items:center;
-justify-content:center;
-
-font-size:18px;
-font-weight:bold;
-
-background:transparent;
-
-color:#222;
-
-border:none;
-border-right:1px solid #d8d8d8;
-
-cursor:pointer;
-
-user-select:none;
-`;
-
-atendimento.onclick = preencherEvolucao;
-
-atendimento.onmouseover=function(){
-    atendimento.style.background="#ececec";
-};
-
-atendimento.onmouseout=function(){
-    atendimento.style.background="transparent";
-};
-
-    const painel=document.createElement("div");
-
-painel.style.cssText=`
-display:flex;
-align-items:center;
-gap:15px;
-
-height:100%;
-
-padding:0 20px;
-
-background:#f8f8f8;
-
-flex:1;
-`;
-//--------------------------------------------------
-// BOTÃO RELATÓRIO
-//--------------------------------------------------
-
-const relatorio=document.createElement("div");
-
-relatorio.innerHTML="📋 Relatório";
-
-relatorio.style.cssText=`
-display:flex;
-align-items:center;
-justify-content:center;
-
-height:100%;
-
-padding:0 28px;
-
-font-size:18px;
-font-weight:bold;
-
-color:#222;
-
-cursor:pointer;
-
-user-select:none;
-
-border-left:1px solid #d8d8d8;
-`;
-
-relatorio.onmouseover=function(){
-    relatorio.style.background="#ececec";
-};
-
-relatorio.onmouseout=function(){
-    relatorio.style.background="transparent";
-};
-
-relatorio.onclick=abrirRelatorio;
-    const atualizar=document.createElement("div");
-
-atualizar.innerHTML="🔄 Atualizar";
-
-atualizar.style.cssText=`
-display:flex;
-align-items:center;
-justify-content:center;
-
-height:100%;
-
-padding:0 28px;
-
-font-size:18px;
-font-weight:bold;
-
-color:#222;
-
-cursor:pointer;
-
-user-select:none;
-
-border-left:1px solid #d8d8d8;
-`;
-
-atualizar.onmouseover=function(){
-    atualizar.style.background="#ececec";
-};
-
-atualizar.onmouseout=function(){
-    atualizar.style.background="transparent";
-};
-
-//--------------------------------------------------
+   //--------------------------------------------------
 // BOTÃO CID
 //--------------------------------------------------
 
@@ -259,105 +131,26 @@ cid.onmouseout=function(){
 };
 
 cid.onclick=abrirMenuCID;
-window.preencherCID = function(cid){
 
-    const campo = document.querySelector(
-        'input[name*="cid:descricao:textField"]'
-    );
+//--------------------------------------------------
+// BOTÃO SEPSE
+//--------------------------------------------------
 
-    if(!campo){
-        alert("Campo CID não encontrado.");
-        return;
-    }
+const sepse=document.createElement("div");
 
-    const dados = $(campo).data();
+sepse.innerHTML="🦠 SEPSE";
 
-    if(!dados || !dados.tokenInputObject){
-        alert("TokenInput não encontrado.");
-        return;
-    }
+sepse.style.cssText=cid.style.cssText;
 
-    const token = dados.tokenInputObject;
-
-    token.clear();
-
-    const item = {
-        id: cid.replace(/\./g,""),
-        name: "( " + cid.replace(/\./g,"") + " ) " + cid
-    };
-
-    token.add(item);
-
-    if(typeof dados.settings.onAdd === "function"){
-    dados.settings.onAdd(item);
-}
-
-setTimeout(() => {
-
-    // MÉDICO
-    const select = document.querySelector(
-        'select[name*="profissional"]'
-    );
-
-   if (select) {
-
-    select.value = "96829844";
-
-    select.dispatchEvent(new Event("change", {
-        bubbles: true
-    }));
-
-}
-
-atualizarCamposAlta();
-
-    // MOTIVO = MELHORADO
-    const motivo = document.querySelector(
-        'select[name*="motivo"]'
-    );
-
-    if (motivo) {
-
-        const op = [...motivo.options].find(o =>
-            o.text.trim().toUpperCase() === "MELHORADO"
-        );
-
-        if (op) {
-
-            motivo.value = op.value;
-
-            motivo.dispatchEvent(new Event("change", {
-                bubbles: true
-            }));
-        }
-    }
-
-       // CLASSIFICAÇÃO = OUTROS
-    const classificacao = document.querySelector(
-        'select[name*="classificacaoAtendimento"]'
-    );
-
-    if (classificacao) {
-
-        const op = [...classificacao.options].find(o =>
-            o.text.trim().toUpperCase() === "OUTROS"
-        );
-
-        if (op) {
-
-            classificacao.value = op.value;
-
-            classificacao.dispatchEvent(new Event("change", {
-                bubbles: true
-            }));
-
-        }
-
-    }
-
-}, 500);
-
+sepse.onmouseover=function(){
+    sepse.style.background="#ececec";
 };
+
+sepse.onmouseout=function(){
+    sepse.style.background="transparent";
+};
+
+sepse.onclick=abrirJanelaSepse;
 
 function selecionarOpcao(select, texto){
 
