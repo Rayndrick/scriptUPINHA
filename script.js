@@ -8,21 +8,21 @@ window.celk.version = "1.0";
 
 if (window.celk.running) {
 
-    console.log("CELK Helper já carregado.");
+console.log("CELK Helper já carregado.");
 
-    if (typeof window.celk.init === "function") {
-        window.celk.init();
-    }
-
-    return;
+if (typeof window.celk.init === "function") {
+    window.celk.init();
 }
 
-window.celk.running = true;
-    const CONFIG = {
+return;
 
-    refreshSeconds: Number(
-        localStorage.getItem("celk_refresh") || 5
-    )
+}
+
+window.celk.running = true;const CONFIG = {
+
+refreshSeconds: Number(
+    localStorage.getItem("celk_refresh") || 5
+)
 
 };
 
@@ -30,276 +30,325 @@ const hoje = new Date().toLocaleDateString("pt-BR");
 
 if(localStorage.getItem("celk_relatorio_data") !== hoje){
 
-    localStorage.setItem("celk_relatorio_data", hoje);
+localStorage.setItem("celk_relatorio_data", hoje);
 
-    localStorage.setItem("celk_relatorio","[]");
+localStorage.setItem("celk_relatorio","[]");
 
 }
 
-let refreshTimer=null;
-    //--------------------------------------------------
-// INICIAR
-//--------------------------------------------------
+let refreshTimer=null;//--------------------------------------------------// INICIAR//--------------------------------------------------
 
 window.celk.init = function(){
 
-    criarInterface();
+criarInterface();
 
-    if(window.celk.intervalo) return;
+if(window.celk.intervalo) return;
 
-    window.celk.intervalo = setInterval(function(){
+window.celk.intervalo = setInterval(function(){
 
-        if(!document.getElementById("celk-helper")){
+    if(!document.getElementById("celk-helper")){
 
-            console.log("Barra recriada.");
+        console.log("Barra recriada.");
 
-            criarInterface();
+        criarInterface();
 
-        }
+    }
 
-    },1000);
+},1000);
 
-};
-//--------------------------------------------------
-// INTERFACE
-//--------------------------------------------------
+};//--------------------------------------------------// INTERFACE//--------------------------------------------------
 
 function criarInterface(){
 
-    if(document.getElementById("celk-helper")) return;
+if(document.getElementById("celk-helper")) return;
 
-    const barra=document.createElement("div");
+const barra=document.createElement("div");
 
-    barra.id="celk-helper";
-    window.celkHelperBar = barra;
+barra.id="celk-helper";
+window.celkHelperBar = barra;
 
-  barra.style.cssText=`
-width:100%;
-height:56px;
+barra.style.cssText=`width:100%;height:56px;
 
-display:flex;
-align-items:center;
+display;align-items;
 
 background:#f5f5f5;
 
 border:1px solid #c8c8c8;
 
-box-sizing:border-box;
+box-sizing;
 
-font-family:Segoe UI,Arial,sans-serif;
+font-family UI,Arial,sans-serif;
 
 font-size:16px;
 
-box-shadow:0 2px 6px rgba(0,0,0,.15);
-`;
-//--------------------------------------------------
-// BOTÃO ATENDIMENTO
+box-shadow:0 2px 6px rgba(0,0,0,.15);`;
+
 //--------------------------------------------------
 
-const atendimento=document.createElement("button");
+// BOTÃO ATENDIMENTO//--------------------------------------------------
 
-atendimento.innerHTML="🩺 Atendimento";
+const atendimento = document.createElement("button");
 
-atendimento.style.cssText=`
-flex:0 0 260px;
+atendimento.innerHTML = "🩺 Atendimento";
+
+atendimento.style.cssText=`flex:0 0 260px;
+
 height:100%;
-display:flex;
-align-items:center;
-justify-content:center;
-font-size:18px;
-font-weight:bold;
-background:transparent;
+
+display;align-items;justify-content;
+
+font-size:18px;font-weight;
+
+background;
+
 color:#222;
-border:none;
-border-right:1px solid #d8d8d8;
-cursor:pointer;
-user-select:none;
-`;
 
-atendimento.onclick=preencherEvolucao;
+border;border-right:1px solid #d8d8d8;
 
-atendimento.onmouseover=()=>atendimento.style.background="#ececec";
-atendimento.onmouseout=()=>atendimento.style.background="transparent";
+cursor;
 
-//--------------------------------------------------
-// PAINEL
-//--------------------------------------------------
+user-select;`;
+
+atendimento.onclick = preencherEvolucao;
+
+atendimento.onmouseover=function(){atendimento.style.background="#ececec";};
+
+atendimento.onmouseout=function(){atendimento.style.background="transparent";};
 
 const painel=document.createElement("div");
 
-painel.style.cssText=`
-display:flex;
-align-items:center;
-gap:15px;
-height:100%;
-padding:0 20px;
-background:#f8f8f8;
-flex:1;
-`;
+painel.style.cssText=`display;align-items;gap:15px;
 
-//--------------------------------------------------
-// BOTÃO RELATÓRIO
-//--------------------------------------------------
+height:100%;
+
+padding:0 20px;
+
+background:#f8f8f8;
+
+flex:1;`;//--------------------------------------------------// BOTÃO RELATÓRIO//--------------------------------------------------
 
 const relatorio=document.createElement("div");
 
 relatorio.innerHTML="📋 Relatório";
 
-relatorio.style.cssText=`
-display:flex;
-align-items:center;
-justify-content:center;
+relatorio.style.cssText=`display;align-items;justify-content;
+
 height:100%;
+
 padding:0 28px;
-font-size:18px;
-font-weight:bold;
+
+font-size:18px;font-weight;
+
 color:#222;
-cursor:pointer;
-user-select:none;
-border-left:1px solid #d8d8d8;
-`;
 
-relatorio.onmouseover=()=>relatorio.style.background="#ececec";
-relatorio.onmouseout=()=>relatorio.style.background="transparent";
-relatorio.onclick=abrirRelatorio;
+cursor;
 
-//--------------------------------------------------
-// BOTÃO ATUALIZAR
-//--------------------------------------------------
+user-select;
 
-const atualizar=document.createElement("div");
+border-left:1px solid #d8d8d8;`;
+
+relatorio.onmouseover=function(){relatorio.style.background="#ececec";};
+
+relatorio.onmouseout=function(){relatorio.style.background="transparent";};
+
+relatorio.onclick=abrirRelatorio;const atualizar=document.createElement("div");
 
 atualizar.innerHTML="🔄 Atualizar";
 
-atualizar.style.cssText=relatorio.style.cssText;
+atualizar.style.cssText=`display;align-items;justify-content;
 
-atualizar.onmouseover=()=>atualizar.style.background="#ececec";
-atualizar.onmouseout=()=>atualizar.style.background="transparent";
-    
-   //--------------------------------------------------
-// BOTÃO CID
-//--------------------------------------------------
+height:100%;
+
+padding:0 28px;
+
+font-size:18px;font-weight;
+
+color:#222;
+
+cursor;
+
+user-select;
+
+border-left:1px solid #d8d8d8;`;
+
+atualizar.onmouseover=function(){atualizar.style.background="#ececec";};
+
+atualizar.onmouseout=function(){atualizar.style.background="transparent";};
+
+//--------------------------------------------------// BOTÃO CID//--------------------------------------------------
 
 const cid=document.createElement("div");
 
 cid.innerHTML="📋 CID";
 
-cid.style.cssText=`
-display:flex;
-align-items:center;
-justify-content:center;
+cid.style.cssText=`display;align-items;justify-content;
 
 height:100%;
 
 padding:0 28px;
 
-font-size:18px;
-font-weight:bold;
+font-size:18px;font-weight;
 
 color:#222;
 
-cursor:pointer;
+cursor;
 
-user-select:none;
+user-select;
 
-border-left:1px solid #d8d8d8;
-`;
+border-left:1px solid #d8d8d8;`;
 
-cid.onmouseover=function(){
-    cid.style.background="#ececec";
+cid.onmouseover=function(){cid.style.background="#ececec";};
+
+cid.onmouseout=function(){cid.style.background="transparent";};
+
+cid.onclick=abrirMenuCID;window.preencherCID = function(cid){
+
+const campo = document.querySelector(
+    'input[name*="cid:descricao:textField"]'
+);
+
+if(!campo){
+    alert("Campo CID não encontrado.");
+    return;
+}
+
+const dados = $(campo).data();
+
+if(!dados || !dados.tokenInputObject){
+    alert("TokenInput não encontrado.");
+    return;
+}
+
+const token = dados.tokenInputObject;
+
+token.clear();
+
+const item = {
+    id: cid.replace(/\./g,""),
+    name: "( " + cid.replace(/\./g,"") + " ) " + cid
 };
 
-cid.onmouseout=function(){
-    cid.style.background="transparent";
-};
+token.add(item);
 
-cid.onclick=abrirMenuCID;
-
-//--------------------------------------------------
-// BOTÃO SEPSE
-//--------------------------------------------------
-
-const sepse=document.createElement("div");
-
-sepse.innerHTML="🦠 SEPSE";
-
-sepse.style.cssText=cid.style.cssText;
-
-sepse.onmouseover=function(){
-    sepse.style.background="#ececec";
-};
-
-sepse.onmouseout=function(){
-    sepse.style.background="transparent";
-};
-
-sepse.onclick=abrirJanelaSepse;
-    function abrirJanelaSepse(){
-
-    alert("SEPSE");
+if(typeof dados.settings.onAdd === "function"){
+dados.settings.onAdd(item);
 
 }
 
-function selecionarOpcao(select, texto){
+setTimeout(() => {
 
-    if(!select) return;
+// MÉDICO
+const select = document.querySelector(
+    'select[name*="profissional"]'
+);
 
-    const op = [...select.options].find(o =>
-        o.text.trim().toUpperCase() === texto.toUpperCase()
+if (select) {
+
+select.value = "96829844";
+
+select.dispatchEvent(new Event("change", {
+    bubbles: true
+}));
+
+}
+
+atualizarCamposAlta();
+
+// MOTIVO = MELHORADO
+const motivo = document.querySelector(
+    'select[name*="motivo"]'
+);
+
+if (motivo) {
+
+    const op = [...motivo.options].find(o =>
+        o.text.trim().toUpperCase() === "MELHORADO"
     );
 
-    if(op){
+    if (op) {
 
-        select.value = op.value;
+        motivo.value = op.value;
 
-        select.dispatchEvent(new Event("change",{
-            bubbles:true
+        motivo.dispatchEvent(new Event("change", {
+            bubbles: true
+        }));
+    }
+}
+
+   // CLASSIFICAÇÃO = OUTROS
+const classificacao = document.querySelector(
+    'select[name*="classificacaoAtendimento"]'
+);
+
+if (classificacao) {
+
+    const op = [...classificacao.options].find(o =>
+        o.text.trim().toUpperCase() === "OUTROS"
+    );
+
+    if (op) {
+
+        classificacao.value = op.value;
+
+        classificacao.dispatchEvent(new Event("change", {
+            bubbles: true
         }));
 
     }
 
 }
-function atualizarCamposAlta(){
 
-    selecionarOpcao(
-        document.querySelector('select[name*="motivo"]'),
-        "OUTROS"
-    );
+}, 500);
 
-    selecionarOpcao(
-        document.querySelector('select[name*="classificacaoAtendimento"]'),
-        "MELHORADO"
-    );
+};
+
+function selecionarOpcao(select, texto){
+
+if(!select) return;
+
+const op = [...select.options].find(o =>
+    o.text.trim().toUpperCase() === texto.toUpperCase()
+);
+
+if(op){
+
+    select.value = op.value;
+
+    select.dispatchEvent(new Event("change",{
+        bubbles:true
+    }));
 
 }
-painel.appendChild(relatorio);
-painel.appendChild(cid);
-painel.appendChild(sepse);
-painel.appendChild(atualizar);
-    
 
-barra.appendChild(atendimento);
-barra.appendChild(painel);
+}function atualizarCamposAlta(){
+
+selecionarOpcao(
+    document.querySelector('select[name*="motivo"]'),
+    "OUTROS"
+);
+
+selecionarOpcao(
+    document.querySelector('select[name*="classificacaoAtendimento"]'),
+    "MELHORADO"
+);
+
+}painel.appendChild(relatorio);painel.appendChild(cid);painel.appendChild(atualizar);
+
+barra.appendChild(atendimento);barra.appendChild(painel);
 
 const topo = document.querySelector("#bar-holder");
 
 if (topo) {
 
-    topo.insertAdjacentElement("afterend", barra);
+topo.insertAdjacentElement("afterend", barra);
 
 } else {
 
-    document.body.appendChild(barra);
+document.body.appendChild(barra);
 
-}
-const menu=document.createElement("div");
+}const menu=document.createElement("div");
 
-menu.style.cssText=`
-display:none;
-position:absolute;
-top:100%;
-left:260px;
-background:white;
+menu.style.cssText=`display;position;top:100%;left:260px;background;
 
 border:1px solid #bbb;
 
@@ -307,21 +356,13 @@ padding:15px;
 
 box-shadow:0 4px 12px rgba(0,0,0,.25);
 
-z-index:99999999;
-`;
+z-index:99999999;`;
 
 menu.innerHTML=`
-<div style="display:flex;gap:8px;align-items:center;">
-    <input
-        id="celkTempo"
-        type="number"
-        min="0"
-        value="${CONFIG.refreshSeconds}"
-        style="width:60px;padding:4px;">
-    <button id="celkAgora">Iniciar</button>
-    <button id="celkParar">Parar</button>
+
+<div style="font-size:17px;font-weight:bold;margin-bottom:10px">
+Atualização
 </div>
-`;
 
 <div style="margin-bottom:10px">
 Tempo:
@@ -343,45 +384,42 @@ segundos
 </button>
 `;
 
-barra.appendChild(menu);
-iniciarAtualizacao();
-    setTimeout(()=>{
+barra.appendChild(menu);iniciarAtualizacao();setTimeout(()=>{
 
 document.getElementById("celkAgora").onclick=function(){
 
-    const tempo = Number(document.getElementById("celkTempo").value);
+const tempo = Number(document.getElementById("celkTempo").value);
 
 if(tempo <= 0){
 
-    alert("Informe um tempo maior que 0.");
+alert("Informe um tempo maior que 0.");
 
-    return;
+return;
 
 }
 
 CONFIG.refreshSeconds = tempo;
 
-    localStorage.setItem(
-        "celk_refresh",
-        CONFIG.refreshSeconds
-    );
+localStorage.setItem(
+    "celk_refresh",
+    CONFIG.refreshSeconds
+);
 
-    clicarPesquisar();
+clicarPesquisar();
 
-    iniciarAtualizacao();
+iniciarAtualizacao();
 
-};
-        document.getElementById("celkParar").onclick=function(){
+};document.getElementById("celkParar").onclick=function(){
 
-    clearInterval(refreshTimer);
+clearInterval(refreshTimer);
 
-    refreshTimer=null;
+refreshTimer=null;
 
-    CONFIG.refreshSeconds=0;
+CONFIG.refreshSeconds=0;
 
-    localStorage.setItem("celk_refresh",0);
+localStorage.setItem("celk_refresh",0);
 
-    document.getElementById("celkTempo").value=0;
+document.getElementById("celkTempo").value=0;
 
 };
 
@@ -395,103 +433,92 @@ iniciarAtualizacao();
 
 };
 
-},100);
-    atualizar.onclick=function(e){
+},100);atualizar.onclick=function(e){
 
-    e.stopPropagation();
+e.stopPropagation();
 
-    menu.style.display=
-        menu.style.display==="block"
-        ?"none"
-        :"block";
+menu.style.display=
+    menu.style.display==="block"
+    ?"none"
+    :"block";
 
-};
-// Fecha ao clicar fora
-document.addEventListener("click",function(e){
+};// Fecha ao clicar foradocument.addEventListener("click",function(e){
 
-    if(menu.style.display==="none") return;
+if(menu.style.display==="none") return;
 
-    if(
-        !menu.contains(e.target) &&
-        !atualizar.contains(e.target)
-    ){
-        menu.style.display="none";
-    }
-
-});
-
-// Fecha com ESC
-document.addEventListener("keydown",function(e){
-
-    if(e.key==="Escape"){
-        menu.style.display="none";
-    }
-
-});
-
+if(
+    !menu.contains(e.target) &&
+    !atualizar.contains(e.target)
+){
+    menu.style.display="none";
 }
-    //--------------------------------------------------
-// PREENCHER EVOLUÇÃO
-//--------------------------------------------------
+
+});
+
+// Fecha com ESCdocument.addEventListener("keydown",function(e){
+
+if(e.key==="Escape"){
+    menu.style.display="none";
+}
+
+});
+
+}//--------------------------------------------------// PREENCHER EVOLUÇÃO//--------------------------------------------------
 
 function preencherEvolucao(){
 
-    if(typeof tinymce==="undefined" || !tinymce.activeEditor){
+if(typeof tinymce==="undefined" || !tinymce.activeEditor){
 
-        alert("Abra a tela de Evolução.");
+    alert("Abra a tela de Evolução.");
 
-        return;
-
-    }
-
-    const tela=document.body.innerText;
-
-let alergia = "NEGA";
-
-const mAlergia = tela.match(
-    /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
-);
-
-if (mAlergia) {
-
-    let valor = mAlergia[1]
-        .replace(/\[\+\]/g, "")
-        .replace(/\[-\]/g, "")
-        .replace(/\./g, "")
-        .trim();
-
-    if (
-        valor &&
-        !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
-    ) {
-        alergia = valor;
-    }
+    return;
 
 }
 
-    function obter(regex){
+const tela=document.body.innerText;
 
-        const m=tela.match(regex);
+let alergia = "NEGA";
 
-        return m ? m[1] : "NT";
+const mAlergia = tela.match(/(?(?)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i);
 
-    }
+if (mAlergia) {
 
-    const peso=obter(/Peso:\s*([\d.,]+)/i);
+let valor = mAlergia[1]
+    .replace(/\[\+\]/g, "")
+    .replace(/\[-\]/g, "")
+    .replace(/\./g, "")
+    .trim();
 
-    const fc=obter(/(?:F\.?C\.?|FC|Frequência Cardíaca)\s*:?\s*([\d.,]+)/i);
+if (
+    valor &&
+    !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
+) {
+    alergia = valor;
+}
 
-    const fr=obter(/(?:F\.?R\.?|FR|Frequência Respiratória|Freq\.?\s*Resp\.?)\s*:?\s*([\d.,]+)/i);
+}
 
-    const sat=obter(/(?:Sat\.?Ox\.?|Sat\.?|Saturação|SpO2|SpO₂)\s*:?\s*([\d.,]+)/i);
+function obter(regex){
 
-    const temp=obter(/(?:Temperatura|Temp\.?)\s*:?\s*([\d.,]+)/i);
+    const m=tela.match(regex);
 
-   const numero = document.location.href.match(/Prontuario:(\d+)/i)?.[1] || "NT";
+    return m ? m[1] : "NT";
 
-const cabecalho = tela.match(
-/([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
-);
+}
+
+const peso=obter(/Peso:\s*([\d.,]+)/i);
+
+const fc=obter(/(?:F\.?C\.?|FC|Frequência Cardíaca)\s*:?\s*([\d.,]+)/i);
+
+const fr=obter(/(?:F\.?R\.?|FR|Frequência Respiratória|Freq\.?\s*Resp\.?)\s*:?\s*([\d.,]+)/i);
+
+const sat=obter(/(?:Sat\.?Ox\.?|Sat\.?|Saturação|SpO2|SpO₂)\s*:?\s*([\d.,]+)/i);
+
+const temp=obter(/(?:Temperatura|Temp\.?)\s*:?\s*([\d.,]+)/i);
+
+const numero = document.location.href.match(/Prontuario:(\d+)/i)?.[1] || "NT";
+
+const cabecalho = tela.match(/([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*|\s*([^|]+)\s*|\s*DN:/i);
 
 const nome = cabecalho ? cabecalho[1].trim() : "Não encontrado";
 
@@ -499,169 +526,151 @@ const idade = cabecalho ? cabecalho[2].trim() : "";
 
 let chegada = "";
 
-const mTriagem = tela.match(
-/TRIAGEM[\s\S]*?([0-9]{2}\/[0-9]{2}\/[0-9]{4})\s*-\s*([0-9]{2}:[0-9]{2})/i
-);
+const mTriagem = tela.match(/TRIAGEM[\s\S]?([0-9]{2}/[0-9]{2}/[0-9]{4})\s-\s*([0-9]{2}:[0-9]{2})/i);
 
 if(mTriagem){
 
-    chegada = mTriagem[2];
+chegada = mTriagem[2];
 
 }
 
-    const texto=`PACIENTE COM QUADRO DE
+const texto=`PACIENTE COM QUADRO DE
 
+PESO: ${peso} kg | FC: ${fc} | FR: ${fr} | SAT: ${sat} | TEMP: ${temp}°C
 
-# PESO: ${peso} kg | FC: ${fc} | FR: ${fr} | SAT: ${sat} | TEMP: ${temp}°C
+ALERGIAS: ${alergia}
 
-# ALERGIAS: ${alergia}
+CMB: NEGA
 
-# CMB: NEGA
+EXAME FÍSICO
 
+OROFARINGE SEM ALTERAÇÕES
 
-# EXAME FÍSICO
+BEG, CALMO, ATIVO, COLABORATIVO, AAA, EUPNEICO, NORMOCORADO, HIDRATADO
 
-- OROFARINGE SEM ALTERAÇÕES
+MV+ EM AHT, SEM RA, SEM DESCONFORTO RESPIRATÓRIO
 
-- BEG, CALMO, ATIVO, COLABORATIVO, AAA, EUPNEICO, NORMOCORADO, HIDRATADO
+CD:
 
-- MV+ EM AHT, SEM RA, SEM DESCONFORTO RESPIRATÓRIO
+PRESCREVO SINTOMÁTICOS
 
+ORIENTO SINAIS E SINTOMAS DE ALARME E RETORNO, SE NECESSÁRIO
 
-# CD:
+FORNEÇO ATESTADO MÉDICO`;
 
-- PRESCREVO SINTOMÁTICOS
+tinymce.activeEditor.setContent("<pre>"+texto+"</pre>");adicionarRelatorio(nome,idade,chegada);
 
-- ORIENTO SINAIS E SINTOMAS DE ALARME E RETORNO, SE NECESSÁRIO
-
-- FORNEÇO ATESTADO MÉDICO`;
-
-    tinymce.activeEditor.setContent("<pre>"+texto+"</pre>");
-adicionarRelatorio(
-    nome,
-    idade,
-    chegada
-);
-
-}
-    //--------------------------------------------------
-// ATUALIZAÇÃO AUTOMÁTICA
-//--------------------------------------------------
+}//--------------------------------------------------// ATUALIZAÇÃO AUTOMÁTICA//--------------------------------------------------
 
 function iniciarAtualizacao(){
 
-    if(refreshTimer){
+if(refreshTimer){
 
-        clearInterval(refreshTimer);
-
-    }
-
-    if(CONFIG.refreshSeconds<=0){
-
-        return;
-
-    }
-
-    refreshTimer=setInterval(function(){
-
-        clicarPesquisar();
-
-    },CONFIG.refreshSeconds*1000);
+    clearInterval(refreshTimer);
 
 }
 
-//--------------------------------------------------
-// CLICA NO BOTÃO PESQUISAR
+if(CONFIG.refreshSeconds<=0){
+
+    return;
+
+}
+
+refreshTimer=setInterval(function(){
+
+    clicarPesquisar();
+
+},CONFIG.refreshSeconds*1000);
+
+}
+
+//--------------------------------------------------// CLICA NO BOTÃO PESQUISAR//--------------------------------------------------
+
 //--------------------------------------------------
 
-    //--------------------------------------------------
-// ABRIR RELATÓRIO
-//--------------------------------------------------
+// ABRIR RELATÓRIO//--------------------------------------------------
+
+//--------------------------------------------------// ABRIR RELATÓRIO//--------------------------------------------------
 
 //--------------------------------------------------
-// ABRIR RELATÓRIO
-//--------------------------------------------------
 
-    //--------------------------------------------------
-// ADICIONAR AO RELATÓRIO
-//--------------------------------------------------
+// ADICIONAR AO RELATÓRIO//--------------------------------------------------
 
 function adicionarRelatorio(nome, idade, chegada){
 
-    const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
+const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
 
-    // evita duplicar
-    if(lista.some(p =>
-        p.nome === nome &&
-        p.chegada === chegada
-    )){
-        return;
-    }
+// evita duplicar
+if(lista.some(p =>
+    p.nome === nome &&
+    p.chegada === chegada
+)){
+    return;
+}
 
-    const agora = new Date();
+const agora = new Date();
 
-    const atendido =
-        agora.getHours().toString().padStart(2,"0") +
-        ":" +
-        agora.getMinutes().toString().padStart(2,"0");
+const atendido =
+    agora.getHours().toString().padStart(2,"0") +
+    ":" +
+    agora.getMinutes().toString().padStart(2,"0");
 
-    let tempo = "";
+let tempo = "";
 
-    if(chegada){
+if(chegada){
 
-        const h = chegada.split(":");
+    const h = chegada.split(":");
 
-        const inicio = new Date();
+    const inicio = new Date();
 
-        inicio.setHours(
-            Number(h[0]),
-            Number(h[1]),
-            0,
-            0
-        );
-
-        const minutos = Math.max(
-            0,
-            Math.floor((agora - inicio)/60000)
-        );
-
-        tempo = minutos + " min";
-    }
-
-    lista.push({
-
-        numero: lista.length + 1,
-
-        nome,
-
-        idade,
-
-        chegada,
-
-        atendido,
-
-        tempo
-
-    });
-
-    localStorage.setItem(
-        "celk_relatorio",
-        JSON.stringify(lista)
+    inicio.setHours(
+        Number(h[0]),
+        Number(h[1]),
+        0,
+        0
     );
 
-    console.log("Paciente salvo:", nome);
+    const minutos = Math.max(
+        0,
+        Math.floor((agora - inicio)/60000)
+    );
 
+    tempo = minutos + " min";
 }
-function abrirMenuCID(){
 
-    if(document.getElementById("celk-cid-menu")){
-        document.getElementById("celk-cid-menu").remove();
-        return;
-    }
+lista.push({
+
+    numero: lista.length + 1,
+
+    nome,
+
+    idade,
+
+    chegada,
+
+    atendido,
+
+    tempo
+
+});
+
+localStorage.setItem(
+    "celk_relatorio",
+    JSON.stringify(lista)
+);
+
+console.log("Paciente salvo:", nome);
+
+}function abrirMenuCID(){
+
+if(document.getElementById("celk-cid-menu")){
+    document.getElementById("celk-cid-menu").remove();
+    return;
+}
 
 const lista = [
 
-    {cid:"J06.9", nome:"IVAS"},
+{cid:"J06.9", nome:"IVAS"},
 {cid:"J02.9", nome:"Faringite"},
 {cid:"J03.9", nome:"Amigdalite"},
 {cid:"H66.9", nome:"Otite Média"},
@@ -680,304 +689,302 @@ const lista = [
 
 ];
 
-    const fundo=document.createElement("div");
-    fundo.id="celk-cid-menu";
+const fundo=document.createElement("div");
+fundo.id="celk-cid-menu";
 
-    fundo.style.position="fixed";
-    fundo.style.left="0";
-    fundo.style.top="0";
-    fundo.style.width="100%";
-    fundo.style.height="100%";
-    fundo.style.background="rgba(0,0,0,.35)";
-    fundo.style.zIndex="999999";
+fundo.style.position="fixed";
+fundo.style.left="0";
+fundo.style.top="0";
+fundo.style.width="100%";
+fundo.style.height="100%";
+fundo.style.background="rgba(0,0,0,.35)";
+fundo.style.zIndex="999999";
 
-    const caixa=document.createElement("div");
+const caixa=document.createElement("div");
 
-    caixa.style.position="absolute";
-    caixa.style.left="50%";
-    caixa.style.top="50%";
-    caixa.style.transform="translate(-50%,-50%)";
-    caixa.style.width="420px";
-    caixa.style.maxHeight="600px";
-    caixa.style.background="#fff";
-    caixa.style.borderRadius="8px";
-    caixa.style.boxShadow="0 0 20px rgba(0,0,0,.3)";
-    caixa.style.padding="15px";
-    caixa.style.overflow="auto";
+caixa.style.position="absolute";
+caixa.style.left="50%";
+caixa.style.top="50%";
+caixa.style.transform="translate(-50%,-50%)";
+caixa.style.width="420px";
+caixa.style.maxHeight="600px";
+caixa.style.background="#fff";
+caixa.style.borderRadius="8px";
+caixa.style.boxShadow="0 0 20px rgba(0,0,0,.3)";
+caixa.style.padding="15px";
+caixa.style.overflow="auto";
 
-    caixa.innerHTML=`
-        <h2 style="margin-top:0">
-            CID FAVORITOS
-        </h2>
+caixa.innerHTML=`
+    <h2 style="margin-top:0">
+        CID FAVORITOS
+    </h2>
 
-        <input
-            id="celk-cid-pesquisa"
-            placeholder="Pesquisar..."
-            style="
-                width:100%;
-                padding:8px;
-                margin-bottom:12px;
-            "
-        >
+    <input
+        id="celk-cid-pesquisa"
+        placeholder="Pesquisar..."
+        style="
+            width:100%;
+            padding:8px;
+            margin-bottom:12px;
+        "
+    >
 
-        <div id="celk-cid-lista"></div>
-    `;
+    <div id="celk-cid-lista"></div>
+`;
 
-    fundo.appendChild(caixa);
+fundo.appendChild(caixa);
 
-    document.body.appendChild(fundo);
+document.body.appendChild(fundo);
 
-    const listaDiv=document.getElementById("celk-cid-lista");
+const listaDiv=document.getElementById("celk-cid-lista");
 
-    function montar(texto=""){
+function montar(texto=""){
 
-        listaDiv.innerHTML="";
+    listaDiv.innerHTML="";
 
-        lista
-        .filter(x=>
+    lista
+    .filter(x=>
 
-            x.cid.toLowerCase().includes(texto.toLowerCase()) ||
+        x.cid.toLowerCase().includes(texto.toLowerCase()) ||
 
-            x.nome.toLowerCase().includes(texto.toLowerCase())
+        x.nome.toLowerCase().includes(texto.toLowerCase())
 
-        )
-        .forEach(item=>{
+    )
+    .forEach(item=>{
 
-            const b=document.createElement("button");
+        const b=document.createElement("button");
 
-            b.innerHTML=
-                "<b>"+item.cid+"</b> - "+item.nome;
+        b.innerHTML=
+            "<b>"+item.cid+"</b> - "+item.nome;
 
-            b.style.display="block";
-            b.style.width="100%";
-            b.style.marginBottom="6px";
-            b.style.padding="8px";
-            b.style.cursor="pointer";
-            b.style.textAlign="left";
+        b.style.display="block";
+        b.style.width="100%";
+        b.style.marginBottom="6px";
+        b.style.padding="8px";
+        b.style.cursor="pointer";
+        b.style.textAlign="left";
 
-        b.onclick = function(){
+    b.onclick = function(){
 
-    window.preencherCID(item.cid);
+window.preencherCID(item.cid);
 
-    // aguarda o CID ser preenchido
-    setTimeout(function(){
+// aguarda o CID ser preenchido
+setTimeout(function(){
 
-        const nomeMedico = document.querySelector(
-            'label[wicketpath="linkMinhaConta_usuarioLogado"]'
-        )?.textContent.trim();
+    const nomeMedico = document.querySelector(
+        'label[wicketpath="linkMinhaConta_usuarioLogado"]'
+    )?.textContent.trim();
 
-        const select = document.querySelector(
-            'select[name*="profissional"]'
+    const select = document.querySelector(
+        'select[name*="profissional"]'
+    );
+
+    if(nomeMedico && select){
+
+        const opcao = [...select.options].find(o =>
+            o.text.trim().toUpperCase() ===
+            nomeMedico.toUpperCase()
         );
 
-        if(nomeMedico && select){
+        if(opcao){
 
-            const opcao = [...select.options].find(o =>
-                o.text.trim().toUpperCase() ===
-                nomeMedico.toUpperCase()
-            );
+            select.value = opcao.value;
 
-            if(opcao){
-
-                select.value = opcao.value;
-
-                select.dispatchEvent(new Event("change",{
-                    bubbles:true
-                }));
-
-            }
+            select.dispatchEvent(new Event("change",{
+                bubbles:true
+            }));
 
         }
-
-    },300);
-
-    fundo.remove();
-
-};
-
-            listaDiv.appendChild(b);
-
-        });
 
     }
 
-    montar();
+},300);
 
-    document
-        .getElementById("celk-cid-pesquisa")
-        .oninput=function(){
+fundo.remove();
 
-            montar(this.value);
+};
 
-        };
+        listaDiv.appendChild(b);
 
-    fundo.onclick=function(e){
+    });
 
-        if(e.target===fundo){
+}
 
-            fundo.remove();
+montar();
 
-        }
+document
+    .getElementById("celk-cid-pesquisa")
+    .oninput=function(){
+
+        montar(this.value);
 
     };
+
+fundo.onclick=function(e){
+
+    if(e.target===fundo){
+
+        fundo.remove();
+
+    }
+
+};
 
 }
 
 function abrirRelatorio(){
 
-    const pacientes =
-        JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
+const pacientes =
+    JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
 
-    const aba = window.open("", "_blank");
+const aba = window.open("", "_blank");
 
-    let html = `
-    <html>
-    <head>
+let html = `
+<html>
+<head>
 
-    <title>Relatório do Plantão</title>
+<title>Relatório do Plantão</title>
 
-    <style>
+<style>
 
-    body{
+body{
 
-        font-family:Arial;
+    font-family:Arial;
 
-        margin:30px;
+    margin:30px;
 
-    }
+}
 
-    h2{
+h2{
 
-        margin-bottom:5px;
+    margin-bottom:5px;
 
-    }
+}
 
-    table{
+table{
 
-        width:100%;
+    width:100%;
 
-        border-collapse:collapse;
+    border-collapse:collapse;
 
-        margin-top:20px;
+    margin-top:20px;
 
-    }
+}
 
-    th,td{
+th,td{
 
-        border:1px solid #ccc;
+    border:1px solid #ccc;
 
-        padding:8px;
+    padding:8px;
 
-        text-align:center;
+    text-align:center;
 
-    }
+}
 
-    th{
+th{
 
-        background:#f3f3f3;
+    background:#f3f3f3;
 
-    }
+}
 
-    </style>
+</style>
 
-    </head>
+</head>
 
-    <body>
+<body>
 
-    <h2>RELATÓRIO DO PLANTÃO</h2>
+<h2>RELATÓRIO DO PLANTÃO</h2>
 
-    <b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
+<b>Data:</b> ${localStorage.getItem("celk_relatorio_data")}<br>
 
-    <b>Total de pacientes:</b> ${pacientes.length}
+<b>Total de pacientes:</b> ${pacientes.length}
 
-    <table>
+<table>
 
+<tr>
+
+<th>Nº</th>
+
+<th>Nome</th>
+
+<th>Idade</th>
+
+<th>Chegada</th>
+
+<th>Atendido</th>
+
+<th>Tempo</th>
+
+</tr>
+`;
+
+pacientes.forEach(function(p){
+
+    html += `
     <tr>
 
-    <th>Nº</th>
+    <td>${p.numero}</td>
 
-    <th>Nome</th>
+    <td>${p.nome}</td>
 
-    <th>Idade</th>
+    <td>${p.idade}</td>
 
-    <th>Chegada</th>
+    <td>${p.chegada}</td>
 
-    <th>Atendido</th>
+    <td>${p.atendido}</td>
 
-    <th>Tempo</th>
+    <td>${p.tempo}</td>
 
     </tr>
     `;
 
-    pacientes.forEach(function(p){
+});
 
-        html += `
-        <tr>
+html += `
+</table>
 
-        <td>${p.numero}</td>
+</body>
 
-        <td>${p.nome}</td>
+</html>
+`;
 
-        <td>${p.idade}</td>
+aba.document.write(html);
 
-        <td>${p.chegada}</td>
-
-        <td>${p.atendido}</td>
-
-        <td>${p.tempo}</td>
-
-        </tr>
-        `;
-
-    });
-
-    html += `
-    </table>
-
-    </body>
-
-    </html>
-    `;
-
-    aba.document.write(html);
-
-    aba.document.close();
+aba.document.close();
 
 }
 
 function clicarPesquisar(){
 
-    const botoes=[
-        ...document.querySelectorAll("button"),
-        ...document.querySelectorAll("input[type='button']"),
-        ...document.querySelectorAll("a")
-    ];
+const botoes=[
+    ...document.querySelectorAll("button"),
+    ...document.querySelectorAll("input[type='button']"),
+    ...document.querySelectorAll("a")
+];
 
-    const botao=botoes.find(function(el){
+const botao=botoes.find(function(el){
 
-        const txt=(el.innerText||el.value||"").trim().toLowerCase();
+    const txt=(el.innerText||el.value||"").trim().toLowerCase();
 
-        return txt==="pesquisar" || txt==="procurar";
+    return txt==="pesquisar" || txt==="procurar";
 
-    });
+});
 
-    if(botao){
+if(botao){
 
-        botao.click();
+    botao.click();
 
-        console.log("CELK Helper: Pesquisa atualizada.");
+    console.log("CELK Helper: Pesquisa atualizada.");
 
-    }else{
+}else{
 
-        console.log("CELK Helper: Botão Pesquisar não encontrado.");
-
-    }
+    console.log("CELK Helper: Botão Pesquisar não encontrado.");
 
 }
 
-//--------------------------------------------------
-// INICIALIZA
-//--------------------------------------------------
+}
+
+//--------------------------------------------------// INICIALIZA//--------------------------------------------------
 
 // iniciarReceituario();
 
@@ -985,185 +992,182 @@ let observerCELK = null;
 
 function iniciarObserver(){
 
-    if(observerCELK){
-        observerCELK.disconnect();
+if(observerCELK){
+    observerCELK.disconnect();
+}
+
+const alvo =
+    document.querySelector("#wrapper .container .content") ||
+    document.querySelector("#content") ||
+    document.querySelector("#main") ||
+    document.body;
+
+observerCELK = new MutationObserver(function(){
+
+    if(!document.getElementById("celk-helper")){
+        console.log("Reconstruindo barra...");
+        criarInterface();
     }
 
-    const alvo =
-        document.querySelector("#wrapper .container .content") ||
-        document.querySelector("#content") ||
-        document.querySelector("#main") ||
-        document.body;
+    if(
+        typeof tinymce !== "undefined" &&
+        tinymce.activeEditor &&
+        !document.getElementById("celk-prescricao-ped")
+    ){
+        console.log("Reconstruindo prescrição...");
+        criarCampoPrescricao();
+    }
 
-    observerCELK = new MutationObserver(function(){
+});
 
-        if(!document.getElementById("celk-helper")){
-            console.log("Reconstruindo barra...");
-            criarInterface();
-        }
-
-        if(
-            typeof tinymce !== "undefined" &&
-            tinymce.activeEditor &&
-            !document.getElementById("celk-prescricao-ped")
-        ){
-            console.log("Reconstruindo prescrição...");
-            criarCampoPrescricao();
-        }
-
-    });
-
-    observerCELK.observe(alvo,{
-        childList:true,
-        subtree:true
-    });
+observerCELK.observe(alvo,{
+    childList:true,
+    subtree:true
+});
 
 }
 
-    window.celk.init = function(){
+window.celk.init = function(){
 
-    criarInterface();
+criarInterface();
 
-    iniciarObserver();
+iniciarObserver();
 
-    setTimeout(iniciarReceituario,1500);
+setTimeout(iniciarReceituario,1500);
 
 };
 
 window.celk.init();
 
-    //--------------------------------------------------
-// RECEITUÁRIO PEDIÁTRICO
 //--------------------------------------------------
+
+// RECEITUÁRIO PEDIÁTRICO//--------------------------------------------------
 
 function iniciarReceituario(){
 
-    criarCampoPrescricao();
+criarCampoPrescricao();
 
 }
 
 function criarCampoPrescricao(){
 
-    // evita criar duas vezes
-    if(document.getElementById("celk-prescricao-ped")){
-        return;
-    }
+// evita criar duas vezes
+if(document.getElementById("celk-prescricao-ped")){
+    return;
+}
 
-    // somente quando existir TinyMCE (editor do receituário)
-    if(typeof tinymce==="undefined" || !tinymce.activeEditor){
-        return;
-    }
+// somente quando existir TinyMCE (editor do receituário)
+if(typeof tinymce==="undefined" || !tinymce.activeEditor){
+    return;
+}
 
-    // procura um lugar para inserir
-    const editor=tinymce.activeEditor.getContainer();
+// procura um lugar para inserir
+const editor=tinymce.activeEditor.getContainer();
 
-    if(!editor){
-        return;
-    }
+if(!editor){
+    return;
+}
 
-    const barra=document.createElement("div");
+const barra=document.createElement("div");
+
 window.celkReceita = barra;
 
-barra.id = "celk-prescricao-ped";
-    barra.id="celk-prescricao-ped";
+barra.id = "celk-prescricao-ped";barra.id="celk-prescricao-ped";
 
-    barra.style.cssText=`
-        display:flex;
-        align-items:center;
-        gap:10px;
-        margin-bottom:8px;
-        padding:6px;
-        background:#f7f7f7;
-        border:1px solid #d9d9d9;
-    `;
+barra.style.cssText=`
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:8px;
+    padding:6px;
+    background:#f7f7f7;
+    border:1px solid #d9d9d9;
+`;
 
-    barra.innerHTML=`
-        <b>💊 Prescrição:</b>
+barra.innerHTML=`
+    <b>💊 Prescrição:</b>
 
-        <input
-            id="celk-prescricao-input"
-            type="text"
-            placeholder="Digite o medicamento..."
-            style="
-                flex:1;
-                height:30px;
-                font-size:15px;
-                padding:4px 8px;
-            ">
-    `;
-    const input = barra.querySelector("#celk-prescricao-input");
+    <input
+        id="celk-prescricao-input"
+        type="text"
+        placeholder="Digite o medicamento..."
+        style="
+            flex:1;
+            height:30px;
+            font-size:15px;
+            padding:4px 8px;
+        ">
+`;
+const input = barra.querySelector("#celk-prescricao-input");
 
 input.addEventListener("keydown", function(e){
 
-    if(e.key !== "Enter") return;
+if(e.key !== "Enter") return;
 
-    e.preventDefault();
+e.preventDefault();
 
-    const med = buscarMedicamento(this.value);
+const med = buscarMedicamento(this.value);
 
-    if(!med){
+if(!med){
 
-        alert("Medicamento não encontrado.");
+    alert("Medicamento não encontrado.");
 
-        return;
+    return;
 
-    }
+}
 
 const receita = gerarReceita(med);
 
 if(receita){
 
-    inserirNoEditor(receita);
+inserirNoEditor(receita);
 
-}
-    this.value = "";
+}this.value = "";
 
 });
 
 editor.parentNode.insertBefore(barra, editor);
 
-}
-    //--------------------------------------------------
-// CÁLCULO DE DOSE
-//--------------------------------------------------
+}//--------------------------------------------------// CÁLCULO DE DOSE//--------------------------------------------------
 
 function obterPesoPaciente(){
 
-    const tela=document.body.innerText;
+const tela=document.body.innerText;
 
-    const m=tela.match(/Peso:\s*([\d.,]+)/i);
+const m=tela.match(/Peso:\s*([\d.,]+)/i);
 
-    if(!m) return null;
+if(!m) return null;
 
-    return parseFloat(m[1].replace(",","."));
+return parseFloat(m[1].replace(",","."));
 
 }
 
 function gerarReceita(med){
 
-    const peso=obterPesoPaciente();
+const peso=obterPesoPaciente();
 
-    if(!peso){
+if(!peso){
 
-        alert("Peso não encontrado.");
+    alert("Peso não encontrado.");
 
-        return null;
+    return null;
 
-    }
+}
 
-    let dose=med.doseMgKg*peso;
+let dose=med.doseMgKg*peso;
 
-    if(med.doseMaxMg){
+if(med.doseMaxMg){
 
-        dose=Math.min(dose,med.doseMaxMg);
+    dose=Math.min(dose,med.doseMaxMg);
 
-    }
+}
 
-    if(med.tipo==="ML"){
+if(med.tipo==="ML"){
 
-    const ml=(dose/med.mgPorMl).toFixed(1);
+const ml=(dose/med.mgPorMl).toFixed(1);
 
-    return `<p><strong>USO ORAL</strong></p>
+return `<p><strong>USO ORAL</strong></p>
+
 <p>${med.nome} ${med.apresentacao} ------------------ ${med.quantidade}</p>
 <p>Administrar ${ml} mL VIA ORAL DE ${med.intervalo}.</p>`;
 
@@ -1171,11 +1175,12 @@ function gerarReceita(med){
 
 if(med.tipo==="GOTAS"){
 
-    const ml=dose/med.mgPorMl;
+const ml=dose/med.mgPorMl;
 
-    const gotas=Math.round(ml*med.gotasPorMl);
+const gotas=Math.round(ml*med.gotasPorMl);
 
-    return `<p><strong>USO ORAL</strong></p>
+return `<p><strong>USO ORAL</strong></p>
+
 <p>${med.nome} ${med.apresentacao} ------------------ ${med.quantidade}</p>
 <p>Administrar ${gotas} gotas VIA ORAL DE ${med.intervalo}, SE DOR OU FEBRE.</p>`;
 
@@ -1187,319 +1192,120 @@ return med.nome;
 
 function inserirNoEditor(texto){
 
-    if(typeof tinymce==="undefined") return;
+if(typeof tinymce==="undefined") return;
 
-    const editor = tinymce.activeEditor;
+const editor = tinymce.activeEditor;
 
-    if(!editor) return;
+if(!editor) return;
 
-    editor.focus();
+editor.focus();
 
-    editor.execCommand(
-        "mceInsertContent",
-        false,
-        texto
-    );
+editor.execCommand(
+    "mceInsertContent",
+    false,
+    texto
+);
 
 }
 
-   //--------------------------------------------------
-// BANCO DE MEDICAMENTOS
-//--------------------------------------------------
+//--------------------------------------------------// BANCO DE MEDICAMENTOS//--------------------------------------------------
 
-    const PED_MEDS = {
+const PED_MEDS = {
 
-        dipirona:{
+    dipirona:{
 
-            aliases:["dip","dipirona","novalgina"],
+        aliases:["dip","dipirona","novalgina"],
 
-            nome:"DIPIRONA",
+        nome:"DIPIRONA",
 
-            categoria:"ANALGÉSICO",
+        categoria:"ANALGÉSICO",
 
-            apresentacao:"SOLUÇÃO ORAL 500 MG/ML",
+        apresentacao:"SOLUÇÃO ORAL 500 MG/ML",
 
-            doseMgKg:15,
+        doseMgKg:15,
 
-            doseMaxMg:1000,
+        doseMaxMg:1000,
 
-            intervalo:"6/6H",
+        intervalo:"6/6H",
 
-            tipo:"GOTAS",
+        tipo:"GOTAS",
 
-            gotasPorMl:20,
+        gotasPorMl:20,
 
-            mgPorMl:500,
+        mgPorMl:500,
 
-            quantidade:"01 FRASCO"
+        quantidade:"01 FRASCO"
 
-        },
+    },
 
-        paracetamol:{
+    paracetamol:{
 
-            aliases:["par","para","paracetamol","tylenol"],
+        aliases:["par","para","paracetamol","tylenol"],
 
-            nome:"PARACETAMOL",
+        nome:"PARACETAMOL",
 
-            categoria:"ANALGÉSICO",
+        categoria:"ANALGÉSICO",
 
-            apresentacao:"SOLUÇÃO ORAL 200 MG/ML",
+        apresentacao:"SOLUÇÃO ORAL 200 MG/ML",
 
-            doseMgKg:15,
+        doseMgKg:15,
 
-            doseMaxMg:750,
+        doseMaxMg:750,
 
-            intervalo:"6/6H",
+        intervalo:"6/6H",
 
-            tipo:"GOTAS",
+        tipo:"GOTAS",
 
-            gotasPorMl:20,
+        gotasPorMl:20,
 
-            mgPorMl:200,
+        mgPorMl:200,
 
-            quantidade:"01 FRASCO"
+        quantidade:"01 FRASCO"
 
-        },
+    },
 
-        ibuprofeno:{
+    ibuprofeno:{
 
-            aliases:["ibu","ibuprofeno","alivium"],
+        aliases:["ibu","ibuprofeno","alivium"],
 
-            nome:"IBUPROFENO",
+        nome:"IBUPROFENO",
 
-            categoria:"AINE",
+        categoria:"AINE",
 
-            apresentacao:"SUSPENSÃO 100 MG/5 ML",
+        apresentacao:"SUSPENSÃO 100 MG/5 ML",
 
-            doseMgKg:10,
+        doseMgKg:10,
 
-            doseMaxMg:600,
+        doseMaxMg:600,
 
-            intervalo:"8/8H",
+        intervalo:"8/8H",
 
-            tipo:"ML",
+        tipo:"ML",
 
-            mgPorMl:20,
+        mgPorMl:20,
 
-            quantidade:"01 FRASCO"
+        quantidade:"01 FRASCO"
 
-        },
+    },
 
-        amoxicilina250:{
-
-            aliases:[
-                "amox",
-                "amoxicilina",
-                "amoxicilina250",
-                "250"
-            ],
-
-            nome:"AMOXICILINA",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"250 MG/5 ML",
-
-            doseMgKg:50,
-
-            doseMaxMg:3000,
-
-            intervalo:"8/8H",
-
-            tipo:"ML",
-
-            mgPorMl:50,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        amoxicilina400:{
-
-            aliases:[
-                "amox400",
-                "amoxicilina400",
-                "400"
-            ],
-
-            nome:"AMOXICILINA BD",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"400 MG/5 ML",
-
-            doseMgKg:45,
-
-            doseMaxMg:3000,
-
-            intervalo:"12/12H",
-
-            tipo:"ML",
-
-            mgPorMl:80,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        amoxclav250:{
-
-            aliases:[
-                "clav",
-                "clavulin",
-                "amoxclav",
-                "amoxiclav",
-                "amoxclav250"
-            ],
-
-            nome:"AMOXICILINA + CLAVULANATO",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"250 MG + 62,5 MG /5 ML",
-
-            doseMgKg:50,
-
-            doseMaxMg:1500,
-
-            intervalo:"8/8H",
-
-            tipo:"ML",
-
-            mgPorMl:50,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        amoxclav400:{
-
-            aliases:[
-                "clav400",
-                "clavulinbd",
-                "bd",
-                "amoxclav400"
-            ],
-
-            nome:"AMOXICILINA + CLAVULANATO BD",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"400 MG + 57 MG /5 ML",
-
-            doseMgKg:45,
-
-            doseMaxMg:1750,
-
-            intervalo:"12/12H",
-
-            tipo:"ML",
-
-            mgPorMl:80,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        azitromicina:{
-
-            aliases:[
-                "azi",
-                "azitro",
-                "azitromicina"
-            ],
-
-            nome:"AZITROMICINA",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"200 MG/5 ML",
-
-            doseMgKg:10,
-
-            doseMaxMg:500,
-
-            intervalo:"24/24H",
-
-            tipo:"ML",
-
-            mgPorMl:40,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        cefalexina:{
-
-            aliases:[
-                "cefalexina",
-                "keflex",
-                "cefa"
-            ],
-
-            nome:"CEFALEXINA",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"250 MG/5 ML",
-
-            doseMgKg:50,
-
-            doseMaxMg:4000,
-
-            intervalo:"6/6H",
-
-            tipo:"ML",
-
-            mgPorMl:50,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-        cefadroxila:{
-
-            aliases:[
-                "cefadroxila",
-                "cefadoxila",
-                "droxil"
-            ],
-
-            nome:"CEFADROXILA",
-
-            categoria:"ANTIBIÓTICO",
-
-            apresentacao:"250 MG/5 ML",
-
-            doseMgKg:30,
-
-            doseMaxMg:2000,
-
-            intervalo:"12/12H",
-
-            tipo:"ML",
-
-            mgPorMl:50,
-
-            quantidade:"01 FRASCO"
-
-        },
-
-            cefaclor:{
+    amoxicilina250:{
 
         aliases:[
-            "cefaclor"
+            "amox",
+            "amoxicilina",
+            "amoxicilina250",
+            "250"
         ],
 
-        nome:"CEFACLOR",
+        nome:"AMOXICILINA",
 
         categoria:"ANTIBIÓTICO",
 
         apresentacao:"250 MG/5 ML",
 
-        doseMgKg:30,
+        doseMgKg:50,
 
-        doseMaxMg:1000,
+        doseMaxMg:3000,
 
         intervalo:"8/8H",
 
@@ -1511,457 +1317,523 @@ function inserirNoEditor(texto){
 
     },
 
-    sulfametoxazol:{
-
-                aliases:[
-                    "bactrim",
-                    "infectrin",
-                    "sulfa",
-                    "sulfametoxazol",
-                    "sulfatrimetoprim",
-                    "smx",
-                    "tmp"
-                ],
-
-                nome:"SULFAMETOXAZOL + TRIMETOPRIMA",
-
-                categoria:"ANTIBIÓTICO",
-
-                apresentacao:"200 MG + 40 MG / 5 ML",
-
-                doseMgKg:8,
-
-                doseMaxMg:320,
-
-                intervalo:"12/12H",
-
-                tipo:"ML",
-
-                mgPorMl:8,
-
-                quantidade:"01 FRASCO"
-
-            },
-
-            metronidazol:{
-
-                aliases:[
-                    "metro",
-                    "flagyl",
-                    "metronidazol"
-                ],
-
-                nome:"METRONIDAZOL",
-
-                categoria:"ANTIBIÓTICO",
-
-                apresentacao:"SUSPENSÃO 40 MG/ML",
-
-                doseMgKg:40,
-
-                doseMaxMg:4000,
-
-                intervalo:"8/8H",
-
-                tipo:"ML",
-
-                mgPorMl:25,
-
-                quantidade:"01 FRASCO"
-
-            },
-
-            penveoral:{
-
-                aliases:[
-                    "penveoral",
-                    "penv",
-                    "penicilinav"
-                ],
-
-                nome:"PENICILINA V",
-
-                categoria:"ANTIBIÓTICO",
-
-                apresentacao:"400.000 UI / 5 ML",
-
-                doseMgKg:40000,
-
-                doseMaxMg:0,
-
-                intervalo:"12/12H",
-
-                tipo:"UI",
-
-                uiPorMl:80000,
-
-                quantidade:"01 FRASCO"
-
-            },
-
-            ciprofloxacino:{
-
-                aliases:[
-                    "cipro",
-                    "ciprofloxacino"
-                ],
-
-                nome:"CIPROFLOXACINO",
-
-                categoria:"ANTIBIÓTICO",
-
-                apresentacao:"250 MG COMPRIMIDO",
-
-                doseMgKg:15,
-
-                doseMaxMg:500,
-
-                intervalo:"12/12H",
-
-                tipo:"CP",
-
-                mgPorComprimido:250,
-
-                quantidade:"14 COMPRIMIDOS"
-
-            },
-
-            fluconazol:{
-
-                aliases:[
-                    "flu",
-                    "fluconazol",
-                    "zoltec"
-                ],
-
-                nome:"FLUCONAZOL",
-
-                categoria:"ANTIFÚNGICO",
-
-                apresentacao:"100 MG COMPRIMIDO",
-
-                doseMgKg:6,
-
-                doseMaxMg:400,
-
-                intervalo:"24/24H",
-
-                tipo:"CP",
-
-                mgPorComprimido:100,
-
-                quantidade:"14 COMPRIMIDOS"
-
-            },
-
-              aciclovir:{
+    amoxicilina400:{
 
         aliases:[
-            "aciclovir",
-            "zovirax"
+            "amox400",
+            "amoxicilina400",
+            "400"
         ],
 
-        nome:"ACICLOVIR",
+        nome:"AMOXICILINA BD",
 
-        categoria:"ANTIVIRAL",
+        categoria:"ANTIBIÓTICO",
 
-        apresentacao:"200 MG COMPRIMIDO",
+        apresentacao:"400 MG/5 ML",
 
-        doseMgKg:20,
+        doseMgKg:45,
 
-        doseMaxMg:800,
+        doseMaxMg:3000,
 
-        intervalo:"6/6H",
+        intervalo:"12/12H",
 
-        tipo:"CP",
+        tipo:"ML",
 
-        mgPorComprimido:200,
+        mgPorMl:80,
 
-        quantidade:"25 COMPRIMIDOS"
+        quantidade:"01 FRASCO"
 
     },
 
-    albendazol:{
+    amoxclav250:{
 
-                    aliases:[
-                        "albendazol",
-                        "albenza"
-                    ],
+        aliases:[
+            "clav",
+            "clavulin",
+            "amoxclav",
+            "amoxiclav",
+            "amoxclav250"
+        ],
 
-                    nome:"ALBENDAZOL",
+        nome:"AMOXICILINA + CLAVULANATO",
 
-                    categoria:"ANTIPARASITÁRIO",
+        categoria:"ANTIBIÓTICO",
 
-                    apresentacao:"SUSPENSÃO 400 MG/10 ML OU COMP. 400 MG",
+        apresentacao:"250 MG + 62,5 MG /5 ML",
 
-                    doseMgKg:null,
+        doseMgKg:50,
 
-                    intervalo:"24/24H",
+        doseMaxMg:1500,
 
-                    tipo:"ESQUEMA",
+        intervalo:"8/8H",
 
-                    esquema:">2 ANOS: 400 MG (10 ML OU 1 CP) 1X/DIA POR 3-5 DIAS | <2 ANOS: 200 MG (5 ML) 1X/DIA POR 3-5 DIAS",
+        tipo:"ML",
 
-                    quantidade:"01 FRASCO OU 03 COMPRIMIDOS"
+        mgPorMl:50,
 
-                },
+        quantidade:"01 FRASCO"
 
-                ivermectina:{
+    },
 
-                    aliases:[
-                        "ivermectina",
-                        "ivermec",
-                        "iver"
-                    ],
+    amoxclav400:{
 
-                    nome:"IVERMECTINA",
+        aliases:[
+            "clav400",
+            "clavulinbd",
+            "bd",
+            "amoxclav400"
+        ],
 
-                    categoria:"ANTIPARASITÁRIO",
+        nome:"AMOXICILINA + CLAVULANATO BD",
 
-                    apresentacao:"COMPRIMIDO 6 MG",
+        categoria:"ANTIBIÓTICO",
 
-                    doseMgKg:0.2,
+        apresentacao:"400 MG + 57 MG /5 ML",
 
-                    unidadeDose:"MG/KG",
+        doseMgKg:45,
 
-                    intervalo:"DOSE ÚNICA",
+        doseMaxMg:1750,
 
-                    tipo:"CP",
+        intervalo:"12/12H",
 
-                    mgPorComprimido:6,
+        tipo:"ML",
 
-                    observacao:"USAR APENAS >5 ANOS E >15 KG. ESCABIOSE: REPETIR EM 7-14 DIAS.",
+        mgPorMl:80,
 
-                    quantidade:"ATÉ 04 COMPRIMIDOS"
+        quantidade:"01 FRASCO"
 
-                },
+    },
 
-                mebendazol:{
+    azitromicina:{
 
-                    aliases:[
-                        "mebendazol"
-                    ],
+        aliases:[
+            "azi",
+            "azitro",
+            "azitromicina"
+        ],
 
-                    nome:"MEBENDAZOL",
+        nome:"AZITROMICINA",
 
-                    categoria:"ANTIPARASITÁRIO",
+        categoria:"ANTIBIÓTICO",
 
-                    apresentacao:"SUSPENSÃO 100 MG/5 ML OU COMP. 100 MG",
+        apresentacao:"200 MG/5 ML",
 
-                    doseMgKg:null,
+        doseMgKg:10,
 
-                    intervalo:"24/24H",
+        doseMaxMg:500,
 
-                    tipo:"ESQUEMA",
+        intervalo:"24/24H",
 
-                    esquema:"100 MG (5 ML OU 1 CP) 1X/DIA POR 3-7 DIAS",
+        tipo:"ML",
 
-                    observacao:"CONTRAINDICADO <1 ANO. ENTRE 1-2 ANOS AVALIAR RISCO-BENEFÍCIO.",
+        mgPorMl:40,
 
-                    quantidade:"01 FRASCO"
+        quantidade:"01 FRASCO"
 
-                },
+    },
 
-                nitazoxanida:{
+    cefalexina:{
 
-                    aliases:[
-                        "nitazoxanida",
-                        "annita"
-                    ],
+        aliases:[
+            "cefalexina",
+            "keflex",
+            "cefa"
+        ],
 
-                    nome:"NITAZOXANIDA",
+        nome:"CEFALEXINA",
 
-                    categoria:"ANTIPARASITÁRIO",
+        categoria:"ANTIBIÓTICO",
 
-                    apresentacao:"SUSPENSÃO 20 MG/ML",
+        apresentacao:"250 MG/5 ML",
 
-                    doseMgKg:7.5,
+        doseMgKg:50,
 
-                    intervalo:"12/12H",
+        doseMaxMg:4000,
 
-                    tipo:"ML",
+        intervalo:"6/6H",
 
-                    mgPorMl:20,
+        tipo:"ML",
 
-                    duracao:"3 DIAS",
+        mgPorMl:50,
 
-                    observacao:"REGRA PRÁTICA: PESO × 0,375 ML POR DOSE (MÁXIMO 15 ML/DOSE).",
+        quantidade:"01 FRASCO"
 
-                    quantidade:"01 FRASCO"
+    },
 
-                },
+    cefadroxila:{
 
-                secnidazol:{
+        aliases:[
+            "cefadroxila",
+            "cefadoxila",
+            "droxil"
+        ],
 
-                    aliases:[
-                        "secnidazol"
-                    ],
+        nome:"CEFADROXILA",
 
-                    nome:"SECNIDAZOL",
+        categoria:"ANTIBIÓTICO",
 
-                    categoria:"ANTIPARASITÁRIO",
+        apresentacao:"250 MG/5 ML",
 
-                    apresentacao:"SUSPENSÃO 30 MG/ML OU COMP.",
+        doseMgKg:30,
 
-                    doseMgKg:30,
+        doseMaxMg:2000,
 
-                    intervalo:"DOSE ÚNICA",
+        intervalo:"12/12H",
 
-                    tipo:"ML",
+        tipo:"ML",
 
-                    mgPorMl:30,
+        mgPorMl:50,
 
-                    observacao:"GIARDÍASE E AMEBÍASE INTESTINAL: 1 ML/KG EM DOSE ÚNICA. MÁXIMO 2 G.",
+        quantidade:"01 FRASCO"
 
-                    quantidade:"01 FRASCO"
-                             }
+    },
 
-            };
-    function buscarMedicamento(texto){
+        cefaclor:{
 
-    texto = texto.trim().toLowerCase();
+    aliases:[
+        "cefaclor"
+    ],
 
-    for(const med of Object.values(PED_MEDS)){
+    nome:"CEFACLOR",
 
-        if(med.aliases.some(a => a.toLowerCase() === texto)){
-            return med;
-        }
+    categoria:"ANTIBIÓTICO",
 
+    apresentacao:"250 MG/5 ML",
+
+    doseMgKg:30,
+
+    doseMaxMg:1000,
+
+    intervalo:"8/8H",
+
+    tipo:"ML",
+
+    mgPorMl:50,
+
+    quantidade:"01 FRASCO"
+
+},
+
+sulfametoxazol:{
+
+            aliases:[
+                "bactrim",
+                "infectrin",
+                "sulfa",
+                "sulfametoxazol",
+                "sulfatrimetoprim",
+                "smx",
+                "tmp"
+            ],
+
+            nome:"SULFAMETOXAZOL + TRIMETOPRIMA",
+
+            categoria:"ANTIBIÓTICO",
+
+            apresentacao:"200 MG + 40 MG / 5 ML",
+
+            doseMgKg:8,
+
+            doseMaxMg:320,
+
+            intervalo:"12/12H",
+
+            tipo:"ML",
+
+            mgPorMl:8,
+
+            quantidade:"01 FRASCO"
+
+        },
+
+        metronidazol:{
+
+            aliases:[
+                "metro",
+                "flagyl",
+                "metronidazol"
+            ],
+
+            nome:"METRONIDAZOL",
+
+            categoria:"ANTIBIÓTICO",
+
+            apresentacao:"SUSPENSÃO 40 MG/ML",
+
+            doseMgKg:40,
+
+            doseMaxMg:4000,
+
+            intervalo:"8/8H",
+
+            tipo:"ML",
+
+            mgPorMl:25,
+
+            quantidade:"01 FRASCO"
+
+        },
+
+        penveoral:{
+
+            aliases:[
+                "penveoral",
+                "penv",
+                "penicilinav"
+            ],
+
+            nome:"PENICILINA V",
+
+            categoria:"ANTIBIÓTICO",
+
+            apresentacao:"400.000 UI / 5 ML",
+
+            doseMgKg:40000,
+
+            doseMaxMg:0,
+
+            intervalo:"12/12H",
+
+            tipo:"UI",
+
+            uiPorMl:80000,
+
+            quantidade:"01 FRASCO"
+
+        },
+
+        ciprofloxacino:{
+
+            aliases:[
+                "cipro",
+                "ciprofloxacino"
+            ],
+
+            nome:"CIPROFLOXACINO",
+
+            categoria:"ANTIBIÓTICO",
+
+            apresentacao:"250 MG COMPRIMIDO",
+
+            doseMgKg:15,
+
+            doseMaxMg:500,
+
+            intervalo:"12/12H",
+
+            tipo:"CP",
+
+            mgPorComprimido:250,
+
+            quantidade:"14 COMPRIMIDOS"
+
+        },
+
+        fluconazol:{
+
+            aliases:[
+                "flu",
+                "fluconazol",
+                "zoltec"
+            ],
+
+            nome:"FLUCONAZOL",
+
+            categoria:"ANTIFÚNGICO",
+
+            apresentacao:"100 MG COMPRIMIDO",
+
+            doseMgKg:6,
+
+            doseMaxMg:400,
+
+            intervalo:"24/24H",
+
+            tipo:"CP",
+
+            mgPorComprimido:100,
+
+            quantidade:"14 COMPRIMIDOS"
+
+        },
+
+          aciclovir:{
+
+    aliases:[
+        "aciclovir",
+        "zovirax"
+    ],
+
+    nome:"ACICLOVIR",
+
+    categoria:"ANTIVIRAL",
+
+    apresentacao:"200 MG COMPRIMIDO",
+
+    doseMgKg:20,
+
+    doseMaxMg:800,
+
+    intervalo:"6/6H",
+
+    tipo:"CP",
+
+    mgPorComprimido:200,
+
+    quantidade:"25 COMPRIMIDOS"
+
+},
+
+albendazol:{
+
+                aliases:[
+                    "albendazol",
+                    "albenza"
+                ],
+
+                nome:"ALBENDAZOL",
+
+                categoria:"ANTIPARASITÁRIO",
+
+                apresentacao:"SUSPENSÃO 400 MG/10 ML OU COMP. 400 MG",
+
+                doseMgKg:null,
+
+                intervalo:"24/24H",
+
+                tipo:"ESQUEMA",
+
+                esquema:">2 ANOS: 400 MG (10 ML OU 1 CP) 1X/DIA POR 3-5 DIAS | <2 ANOS: 200 MG (5 ML) 1X/DIA POR 3-5 DIAS",
+
+                quantidade:"01 FRASCO OU 03 COMPRIMIDOS"
+
+            },
+
+            ivermectina:{
+
+                aliases:[
+                    "ivermectina",
+                    "ivermec",
+                    "iver"
+                ],
+
+                nome:"IVERMECTINA",
+
+                categoria:"ANTIPARASITÁRIO",
+
+                apresentacao:"COMPRIMIDO 6 MG",
+
+                doseMgKg:0.2,
+
+                unidadeDose:"MG/KG",
+
+                intervalo:"DOSE ÚNICA",
+
+                tipo:"CP",
+
+                mgPorComprimido:6,
+
+                observacao:"USAR APENAS >5 ANOS E >15 KG. ESCABIOSE: REPETIR EM 7-14 DIAS.",
+
+                quantidade:"ATÉ 04 COMPRIMIDOS"
+
+            },
+
+            mebendazol:{
+
+                aliases:[
+                    "mebendazol"
+                ],
+
+                nome:"MEBENDAZOL",
+
+                categoria:"ANTIPARASITÁRIO",
+
+                apresentacao:"SUSPENSÃO 100 MG/5 ML OU COMP. 100 MG",
+
+                doseMgKg:null,
+
+                intervalo:"24/24H",
+
+                tipo:"ESQUEMA",
+
+                esquema:"100 MG (5 ML OU 1 CP) 1X/DIA POR 3-7 DIAS",
+
+                observacao:"CONTRAINDICADO <1 ANO. ENTRE 1-2 ANOS AVALIAR RISCO-BENEFÍCIO.",
+
+                quantidade:"01 FRASCO"
+
+            },
+
+            nitazoxanida:{
+
+                aliases:[
+                    "nitazoxanida",
+                    "annita"
+                ],
+
+                nome:"NITAZOXANIDA",
+
+                categoria:"ANTIPARASITÁRIO",
+
+                apresentacao:"SUSPENSÃO 20 MG/ML",
+
+                doseMgKg:7.5,
+
+                intervalo:"12/12H",
+
+                tipo:"ML",
+
+                mgPorMl:20,
+
+                duracao:"3 DIAS",
+
+                observacao:"REGRA PRÁTICA: PESO × 0,375 ML POR DOSE (MÁXIMO 15 ML/DOSE).",
+
+                quantidade:"01 FRASCO"
+
+            },
+
+            secnidazol:{
+
+                aliases:[
+                    "secnidazol"
+                ],
+
+                nome:"SECNIDAZOL",
+
+                categoria:"ANTIPARASITÁRIO",
+
+                apresentacao:"SUSPENSÃO 30 MG/ML OU COMP.",
+
+                doseMgKg:30,
+
+                intervalo:"DOSE ÚNICA",
+
+                tipo:"ML",
+
+                mgPorMl:30,
+
+                observacao:"GIARDÍASE E AMEBÍASE INTESTINAL: 1 ML/KG EM DOSE ÚNICA. MÁXIMO 2 G.",
+
+                quantidade:"01 FRASCO"
+                         }
+
+        };
+function buscarMedicamento(texto){
+
+texto = texto.trim().toLowerCase();
+
+for(const med of Object.values(PED_MEDS)){
+
+    if(med.aliases.some(a => a.toLowerCase() === texto)){
+        return med;
     }
 
-    return null;
-
 }
-    //--------------------------------------------------
-// SEPSE
-//--------------------------------------------------
 
-function abrirJanelaSepse(){
-
-    if(document.getElementById("celk-sepse")){
-        return;
-    }
-
-    const fundo=document.createElement("div");
-
-    fundo.id="celk-sepse";
-
-    fundo.style.cssText=`
-        position:fixed;
-        inset:0;
-        background:rgba(0,0,0,.35);
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        z-index:999999999;
-    `;
-
-    const caixa=document.createElement("div");
-
-    caixa.style.cssText=`
-        width:760px;
-        background:#fff;
-        border-radius:8px;
-        overflow:hidden;
-        box-shadow:0 8px 25px rgba(0,0,0,.30);
-        font-family:Segoe UI,Arial;
-    `;
-
-    caixa.innerHTML=`
-
-    <div style="
-        background:#1976d2;
-        color:#fff;
-        padding:14px 20px;
-        font-size:22px;
-        font-weight:bold;
-    ">
-        🦠 SEPSE
-    </div>
-
-    <div style="padding:20px;">
-
-        <div style="
-            display:grid;
-            grid-template-columns:repeat(5,1fr);
-            gap:15px;
-        ">
-
-            <div>
-                <label>PAS</label>
-                <input id="sepsePAS" type="number" style="width:100%;">
-            </div>
-
-            <div>
-                <label>FC</label>
-                <input id="sepseFC" type="number" style="width:100%;">
-            </div>
-
-            <div>
-                <label>FR</label>
-                <input id="sepseFR" type="number" style="width:100%;">
-            </div>
-
-            <div>
-                <label>TEMP</label>
-                <input id="sepseTEMP" type="number" step="0.1" style="width:100%;">
-            </div>
-
-            <div>
-                <label>SAT</label>
-                <input id="sepseSAT" type="number" style="width:100%;">
-            </div>
-
-        </div>
-
-        <div id="sepseResultado"
-             style="
-                margin-top:25px;
-                text-align:center;
-                font-size:28px;
-                font-weight:bold;
-            ">
-            NEWS 0
-        </div>
-
-    </div>
-
-    <div style="
-        padding:15px;
-        border-top:1px solid #ddd;
-        display:flex;
-        justify-content:flex-end;
-    ">
-
-        <button id="sepseFechar">
-            Fechar
-        </button>
-
-    </div>
-
-    `;
-
-    fundo.appendChild(caixa);
-
-    document.body.appendChild(fundo);
-
-    document.getElementById("sepseFechar").onclick=function(){
-
-        fundo.remove();
-
-    };
-
-}
-    //--------------------------------------------------
-// SEPSE
-//--------------------------------------------------
-
-function abrirJanelaSepse(){
-
-    alert("SEPSE - funcionando!");
+return null;
 
 }
 
 })();
-
-
