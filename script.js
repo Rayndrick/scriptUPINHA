@@ -676,134 +676,97 @@ function iniciarAtualizacao(){
 
         clicarPesquisar();
 
-    },CONFIG.refreshSeconds*1000);
+},CONFIG.refreshSeconds*1000);
 
 }
-        tinymce.activeEditor.setContent("<pre>"+texto+"</pre>");
 
-    adicionarRelatorio(
-        nome,
-        idade,
-        chegada
-    );
 
+//--------------------------------------------------
+// AUMENTAR EDITOR DE EVOLUÇÃO
+//--------------------------------------------------
+
+function ajustarLayoutEvolucao(){
+
+    const editor = [...document.querySelectorAll('.span-5')]
+        .find(el => el.querySelector('table.mceLayout'));
+
+    if (!editor) return;
+
+    editor.style.setProperty('width','800px','important');
+    editor.style.setProperty('min-width','800px','important');
+    editor.style.setProperty('max-width','800px','important');
+    editor.style.setProperty('margin-left','50px','important');
+
+    const fieldset = editor.querySelector('fieldset');
+
+    if(fieldset){
+        fieldset.style.setProperty('width','800px','important');
+        fieldset.style.setProperty('min-width','800px','important');
+        fieldset.style.setProperty('max-width','800px','important');
+        fieldset.style.setProperty('height','700px','important');
+        fieldset.style.setProperty('box-sizing','border-box','important');
+    }
+
+    const h2 = editor.querySelector('h2');
+
+    if(h2){
+        h2.style.setProperty('width','100%','important');
+        h2.style.setProperty('box-sizing','border-box','important');
+    }
+
+    const field = editor.querySelector('.field');
+
+    if(field){
+        field.style.setProperty('width','800px','important');
+        field.style.setProperty('max-width','800px','important');
+        field.style.setProperty('height','700px','important');
+        field.style.setProperty('margin-right','0px','important');
+        field.style.setProperty('box-sizing','border-box','important');
+    }
+
+    const horizontal = editor.querySelector('.span-horizontal');
+
+    if(horizontal){
+        horizontal.style.setProperty('width','800px','important');
+        horizontal.style.setProperty('max-width','800px','important');
+        horizontal.style.setProperty('height','660px','important');
+        horizontal.style.setProperty('box-sizing','border-box','important');
+    }
+
+    const mceEditor = editor.querySelector('.mceEditor');
+
+    if(mceEditor){
+        mceEditor.style.setProperty('width','100%','important');
+        mceEditor.style.setProperty('max-width','100%','important');
+    }
+
+    const mceLayout = editor.querySelector('table.mceLayout');
+
+    if(mceLayout){
+        mceLayout.style.setProperty('width','800px','important');
+        mceLayout.style.setProperty('min-width','800px','important');
+        mceLayout.style.setProperty('max-width','800px','important');
+        mceLayout.style.setProperty('height','700px','important');
+    }
+
+    const iframe = editor.querySelector('iframe');
+
+    if(iframe){
+        iframe.style.setProperty('width','100%','important');
+        iframe.style.setProperty('height','660px','important');
+        iframe.style.setProperty('min-height','660px','important');
+        iframe.style.setProperty('display','block','important');
+    }
+
+    console.log('✅ EDITOR 800 × 700');
 }
+
 
 //--------------------------------------------------
 // ATUALIZAÇÃO AUTOMÁTICA
 //--------------------------------------------------
 
 function iniciarAtualizacao(){
-
-//--------------------------------------------------
-// CLICA NO BOTÃO PESQUISAR
-//--------------------------------------------------
-
-    //--------------------------------------------------
-// ABRIR RELATÓRIO
-//--------------------------------------------------
-
-//--------------------------------------------------
-// ABRIR RELATÓRIO
-//--------------------------------------------------
-
-    //--------------------------------------------------
-// ADICIONAR AO RELATÓRIO
-//--------------------------------------------------
-
-function adicionarRelatorio(nome, idade, chegada){
-
-    const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
-
-    // evita duplicar
-    if(lista.some(p =>
-        p.nome === nome &&
-        p.chegada === chegada
-    )){
-        return;
-    }
-
-    const agora = new Date();
-
-    const atendido =
-        agora.getHours().toString().padStart(2,"0") +
-        ":" +
-        agora.getMinutes().toString().padStart(2,"0");
-
-    let tempo = "";
-
-    if(chegada){
-
-        const h = chegada.split(":");
-
-        const inicio = new Date();
-
-        inicio.setHours(
-            Number(h[0]),
-            Number(h[1]),
-            0,
-            0
-        );
-
-        const minutos = Math.max(
-            0,
-            Math.floor((agora - inicio)/60000)
-        );
-
-        tempo = minutos + " min";
-    }
-
-    lista.push({
-
-        numero: lista.length + 1,
-
-        nome,
-
-        idade,
-
-        chegada,
-
-        atendido,
-
-        tempo
-
-    });
-
-    localStorage.setItem(
-        "celk_relatorio",
-        JSON.stringify(lista)
-    );
-
-    console.log("Paciente salvo:", nome);
-
-}
-function abrirMenuCID(){
-
-    if(document.getElementById("celk-cid-menu")){
-        document.getElementById("celk-cid-menu").remove();
-        return;
-    }
-
-const lista = [
-
-    {cid:"J06.9", nome:"IVAS"},
-    {cid:"J02.9", nome:"Faringite"},
-    {cid:"J03.9", nome:"Amigdalite"},
-    {cid:"H66.9", nome:"Otite Média"},
-    {cid:"A09", nome:"Gastroenterite"},
-    {cid:"B34.9", nome:"Virose"},
-    {cid:"R50", nome:"Febre"},
-    {cid:"J45", nome:"Asma"},
-    {cid:"L20.9", nome:"Dermatite"},
-    {cid:"K59.0", nome:"Constipação"},
-    {cid:"R10.4", nome:"Dor Abdominal"},
-    {cid:"J00", nome:"Resfriado Comum"},
-    {cid:"Z00.1", nome:"Consulta de Rotina"},
-    {cid:"M54.5", nome:"Dorsalgia"},
-    {cid:"R68.8", nome:"Outros Sintomas e Sinais Gerais Especificados"},
-    {cid:"Z00.0", nome:"Exame Médico Geral (Adulto)"}
-
-];
 
     const fundo=document.createElement("div");
     fundo.id="celk-cid-menu";
