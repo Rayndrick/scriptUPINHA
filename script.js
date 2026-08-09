@@ -1233,55 +1233,165 @@ function abrirCalculadoraNEWS(){
         return;
     }
 
-    // ==========================================
-    // TEXTO ATUAL
-    // ==========================================
+// ==========================================
+// LER PARÂMETROS DO ATENDIMENTO ATUAL
+// ==========================================
 
-    const textoAtual =
-        editor.getContent({
-            format:"text"
-        });
+let textoAtualCELK = "";
 
 
-    function extrair(regex){
+// ==========================================
+// CABEÇALHO ATUAL DO PACIENTE
+// ==========================================
 
-        const m = textoAtual.match(regex);
+const cabecalhoAtual =
+    document.querySelector(
+        ".warning.success.nome-paciente.span-9 h3 label"
+    );
 
-        return m ? m[1] : "";
+if(cabecalhoAtual){
 
+    textoAtualCELK =
+        cabecalhoAtual.innerText ||
+        cabecalhoAtual.textContent ||
+        "";
+
+}
+
+
+// ==========================================
+// FC
+// ==========================================
+
+const fcMatchNEWS =
+    textoAtualCELK.match(
+        /(?:FC|F\.C\.|F\.C)\s*:?\s*(\d{1,3})/i
+    );
+
+const fcInicial =
+    fcMatchNEWS
+        ? fcMatchNEWS[1]
+        : "";
+
+
+// ==========================================
+// SATURAÇÃO
+// ==========================================
+
+const spoMatchNEWS =
+    textoAtualCELK.match(
+        /(?:SAT|SAT\.O2|SAT\.OX|SAT\.OX\.|SATO2|SPO2|SPO₂|SATURAÇÃO)\s*:?\s*(\d{2,3})/i
+    );
+
+const spoInicial =
+    spoMatchNEWS
+        ? spoMatchNEWS[1]
+        : "";
+
+
+// ==========================================
+// PA
+// ==========================================
+
+const paMatchNEWS =
+    textoAtualCELK.match(
+        /(?:PA|P\.A\.|PRESSÃO\s+ARTERIAL)\s*:?\s*(\d{2,3})\s*[xX\/]\s*(\d{2,3})/i
+    );
+
+let pasInicial = "";
+let padInicial = "";
+
+if(paMatchNEWS){
+
+    pasInicial = paMatchNEWS[1] || "";
+
+    padInicial = paMatchNEWS[2] || "";
+
+}
+
+
+// ==========================================
+// FR
+// ==========================================
+
+const frMatchNEWS =
+    textoAtualCELK.match(
+        /(?:FR|F\.R\.|FREQUÊNCIA\s*RESPIRATÓRIA)\s*:?\s*(\d{1,3})/i
+    );
+
+const frInicial =
+    frMatchNEWS
+        ? frMatchNEWS[1]
+        : "";
+
+
+// ==========================================
+// TEMPERATURA
+// ==========================================
+
+const taxMatchNEWS =
+    textoAtualCELK.match(
+        /(?:TAX|TEMP|TEMPERATURA|Tº|T°)\s*:?\s*([\d.,]{2,5})/i
+    );
+
+const taxInicial =
+    taxMatchNEWS
+        ? taxMatchNEWS[1]
+        : "";
+
+
+// ==========================================
+// O2 SUPLEMENTAR
+// ==========================================
+
+let o2Inicial = false;
+
+if(
+    /\bO2\s*:\s*(SIM|S|YES)\b/i.test(textoAtualCELK) ||
+    /\bO2\s+SUPLEMENTAR\b/i.test(textoAtualCELK) ||
+    /\bOXIGÊNIO\s+SUPLEMENTAR\b/i.test(textoAtualCELK)
+){
+
+    o2Inicial = true;
+
+}
+
+
+// ==========================================
+// ALTERAÇÃO DA CONSCIÊNCIA
+// ==========================================
+
+let ancInicial = false;
+
+if(
+    /\bANC\s*:\s*(SIM|S|YES)\b/i.test(textoAtualCELK) ||
+    /ALTERAÇÃO\s+DA\s+CONSCIÊNCIA/i.test(textoAtualCELK) ||
+    /ALTERAÇÃO\s+DE\s+CONSCIÊNCIA/i.test(textoAtualCELK) ||
+    /REBAIXAMENTO\s+DO\s+NÍVEL\s+DE\s+CONSCIÊNCIA/i.test(textoAtualCELK)
+){
+
+    ancInicial = true;
+
+}
+
+
+// ==========================================
+// CONFERÊNCIA
+// ==========================================
+
+console.log(
+    "[NEWS] Parâmetros atuais:",
+    {
+        PAS: pasInicial,
+        PAD: padInicial,
+        FC: fcInicial,
+        FR: frInicial,
+        TAX: taxInicial,
+        SpO2: spoInicial,
+        O2: o2Inicial,
+        ANC: ancInicial
     }
-
-
-    const pasInicial =
-        extrair(
-            /(?:PA|PAS)\s*:?\s*(\d+)(?:\s*[xX\/]\s*(\d+))?/i
-        );
-
-    const padMatch =
-        textoAtual.match(
-            /(?:PA|PAS)\s*:?\s*\d+\s*[xX\/]\s*(\d+)/i
-        );
-
-    const fcInicial =
-        extrair(
-            /(?:FC|F\.C\.|FREQUÊNCIA CARDÍACA)\s*:?\s*(\d+)/i
-        );
-
-    const frInicial =
-        extrair(
-            /(?:FR|F\.R\.|FREQUÊNCIA RESPIRATÓRIA)\s*:?\s*(\d+)/i
-        );
-
-    const taxInicial =
-        extrair(
-            /(?:TAX|TEMP|TEMPERATURA)\s*:?\s*([\d.,]+)/i
-        );
-
-    const spoInicial =
-        extrair(
-            /(?:SAT|SPO2|SPO₂|SATURAÇÃO)\s*:?\s*(\d+)/i
-        );
-
+);
 
     // ==========================================
     // OVERLAY
@@ -1383,7 +1493,7 @@ function abrirCalculadoraNEWS(){
                     id="celk-news-pad"
                     type="text"
                     inputmode="numeric"
-                    value="${padMatch ? padMatch[1] : ""}"
+value="${padInicial || ""}"
                 >
 
                 <div id="celk-news-pam">
