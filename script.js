@@ -125,7 +125,9 @@ cursor:pointer;
 user-select:none;
 `;
 
-atendimento.onclick = preencherEvolucao;
+atendimento.onclick = function(){
+    preencherEvolucao({modo:"atendimento", qChar:0, eChar:1});
+};
 
 atendimento.onmouseover=function(){
     atendimento.style.background="#ececec";
@@ -134,6 +136,148 @@ atendimento.onmouseover=function(){
 atendimento.onmouseout=function(){
     atendimento.style.background="transparent";
 };
+
+//--------------------------------------------------
+// ESTRELA — ATALHOS CLIN / PED
+//--------------------------------------------------
+
+const grupoAtendimento = document.createElement("div");
+
+grupoAtendimento.style.cssText = `
+position:relative;
+height:100%;
+display:flex;
+align-items:center;
+`;
+
+const estrela = document.createElement("button");
+
+estrela.innerHTML = "⭐";
+
+estrela.title = "Atalhos rápidos de atendimento";
+
+estrela.style.cssText = `
+height:100%;
+min-width:70px;
+padding:0 16px;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:20px;
+background:transparent;
+color:#222;
+border:none;
+border-right:1px solid #d8d8d8;
+cursor:pointer;
+user-select:none;
+`;
+
+estrela.onmouseover=function(){
+    estrela.style.background="#ececec";
+};
+
+estrela.onmouseout=function(){
+    if(menuAtendimento.style.display !== "block"){
+        estrela.style.background="transparent";
+    }
+};
+
+const menuAtendimento = document.createElement("div");
+
+menuAtendimento.style.cssText = `
+display:none;
+position:absolute;
+top:100%;
+left:0;
+background:white;
+border:1px solid #bbb;
+padding:6px;
+min-width:230px;
+box-shadow:0 4px 12px rgba(0,0,0,.25);
+z-index:99999999;
+`;
+
+function criarAtalhoAtendimento(label, qChar, eChar, descricao){
+
+    const botao = document.createElement("button");
+
+    botao.innerHTML = label;
+    botao.title = descricao;
+
+    botao.style.cssText = `
+    display:block;
+    width:100%;
+    padding:10px 12px;
+    border:none;
+    background:transparent;
+    text-align:left;
+    font-size:16px;
+    cursor:pointer;
+    color:#222;
+    `;
+
+    botao.onmouseover=function(){
+        botao.style.background="#bfdbfe";
+    };
+
+    botao.onmouseout=function(){
+        botao.style.background="transparent";
+    };
+
+    botao.onclick=function(e){
+        e.stopPropagation();
+        menuAtendimento.style.display="none";
+        estrela.style.background="transparent";
+        preencherEvolucao({
+            modo:(qChar === 1 && eChar === 0) ? "ped" : "clin",
+            qChar:qChar,
+            eChar:eChar
+        });
+    };
+
+    menuAtendimento.appendChild(botao);
+}
+
+criarAtalhoAtendimento(
+    "01 = Clin",
+    0,
+    1,
+    "Atendimento Clínica Geral"
+);
+
+criarAtalhoAtendimento(
+    "10 = Ped",
+    1,
+    0,
+    "Atendimento Pediatria"
+);
+
+grupoAtendimento.appendChild(estrela);
+grupoAtendimento.appendChild(menuAtendimento);
+
+estrela.onclick=function(e){
+
+    e.stopPropagation();
+
+    const aberto = menuAtendimento.style.display === "block";
+
+    menuAtendimento.style.display = aberto ? "none" : "block";
+
+    estrela.style.background = aberto
+        ? "transparent"
+        : "#bfdbfe";
+};
+
+document.addEventListener("click",function(e){
+
+    if(
+        !grupoAtendimento.contains(e.target)
+    ){
+        menuAtendimento.style.display="none";
+        estrela.style.background="transparent";
+    }
+
+});
 
     const painel=document.createElement("div");
 
@@ -442,6 +586,7 @@ painel.appendChild(news);
 painel.appendChild(atualizar);
 
 
+barra.appendChild(grupoAtendimento);
 barra.appendChild(atendimento);
 barra.appendChild(painel);
 
@@ -590,114 +735,263 @@ document.addEventListener("keydown",function(e){
 // PREENCHER EVOLUÇÃO
 //--------------------------------------------------
 
-function preencherEvolucao(){
+function preencherEvolucao(opcoes = {}){
 
-    if(typeof tinymce==="undefined" || !tinymce.activeEditor){
+    // MODOS:
+    // Atendimento direto = apenas ectoscopia
+    // ⭐ Clin = exame físico clínico completo
+    // ⭐ Ped  = exame físico pediátrico
+    const modo = opcoes.modo || "atendimento";
+    const qChar = opcoes.qChar ?? 0;
+    const eChar = opcoes.eChar ?? 1;
 
+    if(typeof tinymce === "undefined" || !tinymce.activeEditor){
         alert("Abra a tela de Evolução.");
-
         return;
-
     }
 
-    const tela=document.body.innerText;
-
-let alergia = "NEGA";
-
-const mAlergia = tela.match(
-    /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
-);
-
-if (mAlergia) {
-
-    let valor = mAlergia[1]
-        .replace(/\[\+\]/g, "")
-        .replace(/\[-\]/g, "")
-        .replace(/\./g, "")
-        .trim();
-
-    if (
-        valor &&
-        !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
-    ) {
-        alergia = valor;
-    }
-
-}
+    const tela = document.body.innerText;
 
     function obter(regex){
+        const m = tela.match(regex);
+        return m ? m[1].trim() : "NT";
+    }
 
-        const m=tela.match(regex);
+    // ------------------------------
+    // DADOS DO PACIENTE
+    // ------------------------------
+    const peso = obter(/Peso:\s*([\d.,]+)/i);
+    const fc = obter(/(?:F\.?C\.?|FC|Frequência Cardíaca)\s*:?\s*([\d.,]+)/i);
+    const fr = obter(/(?:F\.?R\.?|FR|Frequência Respiratória|Freq\.?\s*Resp\.?)\s*:?\s*([\d.,]+)/i);
+    const sat = obter(/(?:Sat\.?Ox\.?|Sat\.?|Saturação|SpO2|SpO₂)\s*:?\s*([\d.,]+)/i);
+    const temp = obter(/(?:Temperatura|Temp\.?)\s*:?\s*([\d.,]+)/i);
+    const pa = obter(/(?:PA|Pressão Arterial)\s*:?\s*([\d.,]+\s*[xX/]\s*[\d.,]+)/i);
+    const dx = obter(/(?:DX|HGT|Glicemia(?:\s+Capilar)?)\s*:?\s*([\d.,]+)/i);
 
-        return m ? m[1] : "NT";
+    const cabecalho = tela.match(
+        /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
+    );
+
+    const nome = cabecalho ? cabecalho[1].trim() : "Não encontrado";
+    const idade = cabecalho ? cabecalho[2].trim() : "";
+    const primeiroNome = nome.split(/\s+/)[0] || "PACIENTE";
+
+    // ------------------------------
+    // UNIDADE + DATA/HORA
+    // ------------------------------
+    const unidadeEl =
+        document.querySelector('label.first[wicketpath="empresaLogada"]') ||
+        document.querySelector('label[wicketpath="empresaLogada"]');
+
+    const unidade = (
+        unidadeEl?.getAttribute("title") ||
+        unidadeEl?.textContent ||
+        document.querySelector('label[title*="UPA"]')?.getAttribute("title") ||
+        "UPA"
+    ).replace(/\.\.\.$/, "").trim().toUpperCase();
+
+    const agora = new Date();
+
+    const dataAtual = agora.toLocaleDateString("pt-BR", {
+        day:"2-digit",
+        month:"2-digit",
+        year:"numeric"
+    });
+
+    const horaAtual = agora.toLocaleTimeString("pt-BR", {
+        hour:"2-digit",
+        minute:"2-digit",
+        hourCycle:"h23"
+    }).slice(0,5);
+
+    // ------------------------------
+    // CHEGADA
+    // ------------------------------
+    let chegada = "";
+
+    const mTriagem = tela.match(
+        /TRIAGEM[\s\S]*?([0-9]{2}\/\d{2}\/\d{4})\s*-\s*([0-9]{2}:\d{2})/i
+    );
+
+    if(mTriagem){
+        chegada = mTriagem[2];
+    }
+
+    // ------------------------------
+    // QUEIXA
+    // ------------------------------
+    let queixa = document.querySelector(
+        'textarea[data-bind*="DscAcolhimento"]'
+    )?.value?.trim() || "";
+
+    if(!queixa){
+        queixa = "PACIENTE COM QUADRO DE";
+    }
+
+    queixa = queixa
+        .replace(/^#+\s*/gm, "")
+        .replace(/\r/g, "")
+        .trim()
+        .toUpperCase();
+
+    // ------------------------------
+    // ALERGIAS
+    // ------------------------------
+    let alergia = "NEGA";
+
+    const mAlergia = tela.match(
+        /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
+    );
+
+    if(mAlergia){
+
+        const valor = mAlergia[1]
+            .replace(/\[\+\]/g, "")
+            .replace(/\[-\]/g, "")
+            .replace(/\./g, "")
+            .trim();
+
+        if(
+            valor &&
+            !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
+        ){
+            alergia = valor.toUpperCase();
+        }
+    }
+
+    const cmb = "NEGA";
+
+    // ------------------------------
+    // SSVV
+    // ------------------------------
+    const ssvv = [
+        `PA: ${pa}`,
+        `FC: ${fc}`,
+        `TAX: ${temp}`,
+        `SAT: ${sat}`,
+        `FR: ${fr}`,
+        `DX: ${dx}`
+    ].join(" - ");
+
+    // ------------------------------
+    // EXAMES FÍSICOS
+    // ------------------------------
+
+    const exameAtendimento = `# EXAME FÍSICO:
+
+- ECTOSCOPIA: BOM ESTADO GERAL, LÚCIDO, ORIENTADO EM TEMPO E ESPAÇO, CONTACTUANTE, CORADO, HIDRATADO, ANICTÉRICO, ACIANÓTICO E AFEBRIL AO TOQUE.`;
+
+    const exameClin = `# EXAME FÍSICO:
+
+- ECTOSCOPIA: BOM ESTADO GERAL, LÚCIDO, ORIENTADO EM TEMPO E ESPAÇO, CONTACTUANTE, CORADO, HIDRATADO, ANICTÉRICO, ACIANÓTICO E AFEBRIL AO TOQUE.
+- APARELHO CARDIOVASCULAR: RITMO CARDÍACO REGULAR EM DOIS TEMPOS, BULHAS NORMOFONÉTICAS, SEM SOPROS.
+- APARELHO RESPIRATÓRIO: MURMÚRIO VESICULAR PRESENTE BILATERALMENTE, SEM RUÍDOS ADVENTÍCIOS, SEM SINAIS DE DESCONFORTO RESPIRATÓRIO.
+- ABDOME PLANO, FLÁCIDO, INDOLOR À PALPAÇÃO, SEM SINAIS DE IRRITAÇÃO PERITONEAL, COM RUÍDOS HIDROAÉREOS PRESENTES.
+- EXTREMIDADES SEM EDEMAS, COM PULSOS PERIFÉRICOS PALPÁVEIS E SIMÉTRICOS, PERFUSÃO PERIFÉRICA PRESERVADA.
+- EXAME NEUROLÓGICO SEM DÉFICITS FOCAIS EVIDENTES, COM FORÇA MUSCULAR E SENSIBILIDADE PRESERVADAS.`;
+
+    const examePed = `# EXAME FÍSICO:
+
+BOM ESTADO GERAL, CORADO, EUPNEICO, ALERTA E ATIVO.
+APARELHO CARDIOVASCULAR: RITMO CARDÍACO REGULAR, EM DOIS TEMPOS, BULHAS NORMOFONÉTICAS, SEM SOPROS AUDÍVEIS.
+APARELHO RESPIRATÓRIO: MURMÚRIO VESICULAR UNIVERSALMENTE AUDÍVEL, SEM RUÍDOS ADVENTÍCIOS, SEM SINAIS DE DESCONFORTO RESPIRATÓRIO.
+
+- ABDOME PLANO, FLÁCIDO, INDOLOR À PALPAÇÃO, SEM SINAIS DE IRRITAÇÃO PERITONEAL, COM RUÍDOS HIDROAÉREOS PRESENTES.
+- EXTREMIDADES SEM EDEMAS, COM PULSOS PERIFÉRICOS PALPÁVEIS E SIMÉTRICOS, PERFUSÃO PERIFÉRICA PRESERVADA.`;
+
+    // ------------------------------
+    // TEXTO FINAL
+    // ------------------------------
+
+    let texto = "";
+
+    // Cabeçalho presente em todos os modos.
+    const cabecalhoUnidade =
+        `# ${unidade} - ${dataAtual} - ATENDIMENTO INICIADO ÀS ${horaAtual}`;
+
+    if(modo === "atendimento"){
+
+        texto = `${cabecalhoUnidade}
+
+# PACIENTE COM QUADRO DE
+
+# CMB: ${cmb}
+# ALERGIAS: ${alergia}
+
+# SSVV: ${ssvv}
+
+${exameAtendimento}
+
+# CD:
+- PRESCREVO SINTOMÁTICOS
+- ORIENTO SINAIS E SINTOMAS DE ALARME E RETORNO, SE NECESSÁRIO
+- FORNEÇO ATESTADO MÉDICO`;
+
+    }else if(modo === "ped" || (qChar === 1 && eChar === 0)){
+
+        texto = `${cabecalhoUnidade}
+
+# PACIENTE COM QUADRO DE
+
+# CMB: ${cmb}
+# ALERGIAS: ${alergia}
+
+# SSVV: ${ssvv}
+
+${examePed}
+
+# CD:
+- VIDE PRESCRIÇÃO
+- FORNEÇO ORIENTAÇÕES E SINAIS DE ALARME
+- RETORNAR SE AUSÊNCIA DE MELHORA APÓS 72 HORAS
+- RETORNAR EM CASO DE PIORA`;
+
+    }else{
+
+        texto = `${cabecalhoUnidade}
+
+# PACIENTE COM QUADRO DE
+
+# CMB: ${cmb}
+# ALERGIAS: ${alergia}
+
+# SSVV: ${ssvv}
+
+${exameClin}
+
+# CD:
+- VIDE PRESCRIÇÃO
+- FORNEÇO ORIENTAÇÕES E SINAIS DE ALARME
+- RETORNAR EM CASO DE PIORA`;
 
     }
 
-    const peso=obter(/Peso:\s*([\d.,]+)/i);
+    const escapeHtml = (valor) => String(valor)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
-    const fc=obter(/(?:F\.?C\.?|FC|Frequência Cardíaca)\s*:?\s*([\d.,]+)/i);
+    const textoHtml = escapeHtml(texto)
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .replace(/\n/g, "<br>");
 
-    const fr=obter(/(?:F\.?R\.?|FR|Frequência Respiratória|Freq\.?\s*Resp\.?)\s*:?\s*([\d.,]+)/i);
+    tinymce.activeEditor.setContent(
+        '<div style="width:100%; max-width:100%; box-sizing:border-box; overflow-wrap:anywhere; word-break:normal;">' +
+        textoHtml +
+        '</div>'
+    );
 
-    const sat=obter(/(?:Sat\.?Ox\.?|Sat\.?|Saturação|SpO2|SpO₂)\s*:?\s*([\d.,]+)/i);
+    const classificacao = obterClassificacao();
 
-    const temp=obter(/(?:Temperatura|Temp\.?)\s*:?\s*([\d.,]+)/i);
-
-   const numero = document.location.href.match(/Prontuario:(\d+)/i)?.[1] || "NT";
-
-const cabecalho = tela.match(
-/([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
-);
-
-const nome = cabecalho ? cabecalho[1].trim() : "Não encontrado";
-
-const idade = cabecalho ? cabecalho[2].trim() : "";
-
-let chegada = "";
-
-const mTriagem = tela.match(
-/TRIAGEM[\s\S]*?([0-9]{2}\/[0-9]{2}\/[0-9]{4})\s*-\s*([0-9]{2}:[0-9]{2})/i
-);
-
-if(mTriagem){
-
-    chegada = mTriagem[2];
-
-}
-
-    const texto=`PACIENTE COM QUADRO DE
-
-
-# PESO: ${peso} kg | FC: ${fc} | FR: ${fr} | SAT: ${sat} | TEMP: ${temp}°C
-
-# ALERGIAS: ${alergia}
-
-# CMB: NEGA
-
-
-# EXAME FÍSICO
-
-- OROFARINGE SEM ALTERAÇÕES
-
-- BEG, CALMO, ATIVO, COLABORATIVO, AAA, EUPNEICO, NORMOCORADO, HIDRATADO
-
-- MV+ EM AHT, SEM RA, SEM DESCONFORTO RESPIRATÓRIO
-
-
-# CD:
-
-- PRESCREVO SINTOMÁTICOS
-
-- ORIENTO SINAIS E SINTOMAS DE ALARME E RETORNO, SE NECESSÁRIO
-
-- FORNEÇO ATESTADO MÉDICO`;
-
-    tinymce.activeEditor.setContent("<pre>"+texto+"</pre>");
-adicionarRelatorio(
-    nome,
-    idade,
-    chegada
-);
+    adicionarRelatorio(
+        nome,
+        idade,
+        chegada,
+        classificacao
+    );
 
 }
     //--------------------------------------------------
@@ -742,7 +1036,47 @@ function iniciarAtualizacao(){
 // ADICIONAR AO RELATÓRIO
 //--------------------------------------------------
 
-function adicionarRelatorio(nome, idade, chegada){
+// --------------------------------------------------
+// IDENTIFICAR CLASSIFICAÇÃO DE RISCO
+// --------------------------------------------------
+
+function obterClassificacao(){
+
+    const elemento = document.querySelector(
+        'div.icon32[class*="ball-"]'
+    );
+
+    if(!elemento){
+        return "NÃO IDENTIFICADA";
+    }
+
+    const classes = elemento.className;
+
+    if(classes.includes("ball-red")){
+        return "VERMELHO";
+    }
+
+    if(classes.includes("ball-orange")){
+        return "LARANJA";
+    }
+
+    if(classes.includes("ball-yellow")){
+        return "AMARELO";
+    }
+
+    if(classes.includes("ball-green")){
+        return "VERDE";
+    }
+
+    if(classes.includes("ball-blue")){
+        return "AZUL";
+    }
+
+    return "NÃO IDENTIFICADA";
+}
+
+
+function adicionarRelatorio(nome, idade, chegada, classificacao){
 
     const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
 
@@ -786,19 +1120,21 @@ function adicionarRelatorio(nome, idade, chegada){
 
     lista.push({
 
-        numero: lista.length + 1,
+    numero: lista.length + 1,
 
-        nome,
+    nome,
 
-        idade,
+    idade,
 
-        chegada,
+    classificacao,
 
-        atendido,
+    chegada,
 
-        tempo
+    atendido,
 
-    });
+    tempo
+
+});
 
     localStorage.setItem(
         "celk_relatorio",
@@ -1050,17 +1386,14 @@ function abrirRelatorio(){
 
     <tr>
 
-    <th>Nº</th>
+   <th>Nº</th>
+<th>Nome</th>
+<th>Idade</th>
+<th>Classificação</th>
+<th>Chegada</th>
+<th>Atendido</th>
+<th>Tempo</th>
 
-    <th>Nome</th>
-
-    <th>Idade</th>
-
-    <th>Chegada</th>
-
-    <th>Atendido</th>
-
-    <th>Tempo</th>
 
     </tr>
     `;
@@ -1071,16 +1404,18 @@ function abrirRelatorio(){
         <tr>
 
         <td>${p.numero}</td>
+<td>${p.nome}</td>
 
-        <td>${p.nome}</td>
+<td>${p.idade}</td>
 
-        <td>${p.idade}</td>
+<td>${p.classificacao || "NÃO IDENTIFICADA"}</td>
 
-        <td>${p.chegada}</td>
+<td>${p.chegada}</td>
 
-        <td>${p.atendido}</td>
+<td>${p.atendido}</td>
 
-        <td>${p.tempo}</td>
+<td>${p.tempo}</td>
+
 
         </tr>
         `;
