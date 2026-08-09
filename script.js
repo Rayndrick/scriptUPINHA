@@ -259,6 +259,51 @@ cid.onmouseout=function(){
 };
 
 cid.onclick=abrirMenuCID;
+//--------------------------------------------------
+// BOTÃO NEWS
+//--------------------------------------------------
+
+const news = document.createElement("div");
+
+news.innerHTML = "📱 NEWS";
+
+news.style.cssText = `
+display:flex;
+align-items:center;
+justify-content:center;
+
+height:100%;
+
+padding:0 28px;
+
+font-size:18px;
+font-weight:bold;
+
+color:#222;
+
+cursor:pointer;
+
+user-select:none;
+
+border-left:1px solid #d8d8d8;
+`;
+
+news.onmouseover=function(){
+    news.style.background="#ececec";
+};
+
+news.onmouseout=function(){
+    news.style.background="transparent";
+};
+
+news.onclick = function(e){
+
+    e.stopPropagation();
+
+    abrirCalculadoraNEWS();
+
+};
+
 window.preencherCID = function(cid){
 
     const campo = document.querySelector(
@@ -393,8 +438,9 @@ function atualizarCamposAlta(){
 }
 painel.appendChild(relatorio);
 painel.appendChild(cid);
+painel.appendChild(news);
 painel.appendChild(atualizar);
-    
+
 
 barra.appendChild(atendimento);
 barra.appendChild(painel);
@@ -1084,6 +1130,969 @@ function clicarPesquisar(){
     }
 
 }
+
+//--------------------------------------------------
+// CALCULADORA NEWS
+//--------------------------------------------------
+
+function abrirCalculadoraNEWS(){
+
+    if(document.getElementById("celk-news-overlay")){
+        return;
+    }
+
+    function num(v){
+
+        if(v === null || v === undefined || v === ""){
+            return null;
+        }
+
+        const n = parseFloat(
+            String(v).replace(",", ".")
+        );
+
+        return isNaN(n) ? null : n;
+    }
+
+    function pontos(tipo, valor){
+
+        const tabela = {
+
+            pas:[
+                [90,3],
+                [100,2],
+                [110,1],
+                [219,0],
+                [Infinity,3]
+            ],
+
+            fc:[
+                [40,3],
+                [50,1],
+                [90,0],
+                [110,1],
+                [130,2],
+                [Infinity,3]
+            ],
+
+            fr:[
+                [8,3],
+                [11,1],
+                [20,0],
+                [24,2],
+                [Infinity,3]
+            ],
+
+            tax:[
+                [35,3],
+                [36,1],
+                [38,0],
+                [39,1],
+                [Infinity,2]
+            ],
+
+            spo2:[
+                [91,3],
+                [93,2],
+                [95,1],
+                [Infinity,0]
+            ]
+
+        };
+
+        const faixa = tabela[tipo];
+
+        if(!faixa){
+            return 0;
+        }
+
+        for(const item of faixa){
+
+            if(valor <= item[0]){
+                return item[1];
+            }
+
+        }
+
+        return 0;
+    }
+
+    // ==========================================
+    // EDITOR DA EVOLUÇÃO
+    // ==========================================
+
+    const editor =
+        typeof tinymce !== "undefined"
+            ? tinymce.activeEditor
+            : null;
+
+    if(!editor){
+
+        alert("Abra a tela de Evolução.");
+
+        return;
+    }
+
+    // ==========================================
+    // TEXTO ATUAL
+    // ==========================================
+
+    const textoAtual =
+        editor.getContent({
+            format:"text"
+        });
+
+
+    function extrair(regex){
+
+        const m = textoAtual.match(regex);
+
+        return m ? m[1] : "";
+
+    }
+
+
+    const pasInicial =
+        extrair(
+            /(?:PA|PAS)\s*:?\s*(\d+)(?:\s*[xX\/]\s*(\d+))?/i
+        );
+
+    const padMatch =
+        textoAtual.match(
+            /(?:PA|PAS)\s*:?\s*\d+\s*[xX\/]\s*(\d+)/i
+        );
+
+    const fcInicial =
+        extrair(
+            /(?:FC|F\.C\.|FREQUÊNCIA CARDÍACA)\s*:?\s*(\d+)/i
+        );
+
+    const frInicial =
+        extrair(
+            /(?:FR|F\.R\.|FREQUÊNCIA RESPIRATÓRIA)\s*:?\s*(\d+)/i
+        );
+
+    const taxInicial =
+        extrair(
+            /(?:TAX|TEMP|TEMPERATURA)\s*:?\s*([\d.,]+)/i
+        );
+
+    const spoInicial =
+        extrair(
+            /(?:SAT|SPO2|SPO₂|SATURAÇÃO)\s*:?\s*(\d+)/i
+        );
+
+
+    // ==========================================
+    // OVERLAY
+    // ==========================================
+
+    const overlay =
+        document.createElement("div");
+
+    overlay.id =
+        "celk-news-overlay";
+
+    overlay.style.cssText = `
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.5);
+        z-index:99999999;
+    `;
+
+
+    // ==========================================
+    // JANELA
+    // ==========================================
+
+    const caixa =
+        document.createElement("div");
+
+    caixa.id =
+        "celk-news-modal";
+
+    caixa.style.cssText = `
+        position:fixed;
+        top:50%;
+        left:50%;
+        transform:translate(-50%,-50%);
+
+        background:#fff;
+
+        padding:20px;
+
+        border-radius:8px;
+
+        box-shadow:0 4px 20px rgba(0,0,0,.3);
+
+        z-index:100000000;
+
+        width:600px;
+        max-width:90vw;
+        max-height:85vh;
+
+        overflow-y:auto;
+
+        font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        sans-serif;
+    `;
+
+
+    caixa.innerHTML = `
+
+        <h3 style="
+            margin:0 0 15px;
+            color:#2c3e50;
+            font-size:18px;
+        ">
+            NEWS Calculator
+        </h3>
+
+
+        <div style="
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:10px 15px;
+        ">
+
+            <div class="news-row">
+
+                <label>PAS:</label>
+
+                <input
+                    id="celk-news-pas"
+                    type="text"
+                    inputmode="numeric"
+                    value="${pasInicial || ""}"
+                >
+
+                <div id="celk-news-pts-pas">0</div>
+
+            </div>
+
+
+            <div class="news-row">
+
+                <label>PAD:</label>
+
+                <input
+                    id="celk-news-pad"
+                    type="text"
+                    inputmode="numeric"
+                    value="${padMatch ? padMatch[1] : ""}"
+                >
+
+                <div id="celk-news-pam">
+                    PAM: -
+                </div>
+
+            </div>
+
+
+            <div class="news-row">
+
+                <label>FC (bpm):</label>
+
+                <input
+                    id="celk-news-fc"
+                    type="text"
+                    inputmode="numeric"
+                    value="${fcInicial || ""}"
+                >
+
+                <div id="celk-news-pts-fc">0</div>
+
+            </div>
+
+
+            <div class="news-row">
+
+                <label>FR (irpm):</label>
+
+                <input
+                    id="celk-news-fr"
+                    type="text"
+                    inputmode="numeric"
+                    value="${frInicial || ""}"
+                >
+
+                <div id="celk-news-pts-fr">0</div>
+
+            </div>
+
+
+            <div class="news-row">
+
+                <label>TAX (°C):</label>
+
+                <input
+                    id="celk-news-tax"
+                    type="text"
+                    inputmode="decimal"
+                    value="${taxInicial || ""}"
+                >
+
+                <div id="celk-news-pts-tax">0</div>
+
+            </div>
+
+
+            <div class="news-row">
+
+                <label>SpO2 (%):</label>
+
+                <input
+                    id="celk-news-spo2"
+                    type="text"
+                    inputmode="numeric"
+                    value="${spoInicial || ""}"
+                >
+
+                <div id="celk-news-pts-spo2">0</div>
+
+            </div>
+
+
+            <div class="news-check">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="celk-news-o2"
+                    >
+
+                    O2 suplementar
+
+                </label>
+
+                <div id="celk-news-pts-o2">0</div>
+
+            </div>
+
+
+            <div class="news-check">
+
+                <label>
+
+                    <input
+                        type="checkbox"
+                        id="celk-news-anc"
+                    >
+
+                    Alt. consciência
+
+                </label>
+
+                <div id="celk-news-pts-anc">0</div>
+
+            </div>
+
+        </div>
+
+
+        <div style="
+            margin-top:15px;
+            padding:12px;
+            background:#f8f9fa;
+            border-radius:4px;
+            text-align:center;
+        ">
+
+            <div style="
+                font-size:12px;
+                color:#666;
+            ">
+                Total NEWS Score
+            </div>
+
+            <div
+                id="celk-news-total"
+                style="
+                    font-size:28px;
+                    font-weight:bold;
+                    color:#e74c3c;
+                "
+            >
+                -
+            </div>
+
+        </div>
+
+
+        <div style="
+            margin-top:15px;
+            display:flex;
+            gap:10px;
+        ">
+
+            <button
+                id="celk-news-save"
+                style="
+                    flex:1;
+                    padding:10px;
+                    background:#27ae60;
+                    color:#fff;
+                    border:none;
+                    border-radius:4px;
+                    cursor:pointer;
+                    font-size:15px;
+                    font-weight:500;
+                "
+            >
+                Salvar
+            </button>
+
+
+            <button
+                id="celk-news-append"
+                style="
+                    padding:10px 15px;
+                    background:#3498db;
+                    color:#fff;
+                    border:none;
+                    border-radius:4px;
+                    cursor:pointer;
+                    font-size:15px;
+                    font-weight:500;
+                "
+            >
+                +
+            </button>
+
+
+            <button
+                id="celk-news-cancel"
+                style="
+                    flex:1;
+                    padding:10px;
+                    background:#95a5a6;
+                    color:#fff;
+                    border:none;
+                    border-radius:4px;
+                    cursor:pointer;
+                    font-size:15px;
+                    font-weight:500;
+                "
+            >
+                Cancelar
+            </button>
+
+        </div>
+    `;
+
+
+    // ==========================================
+    // ESTILO
+    // ==========================================
+
+    const style =
+        document.createElement("style");
+
+    style.id =
+        "celk-news-style";
+
+    style.textContent = `
+
+        .news-row{
+            display:grid;
+            grid-template-columns:1fr 60px;
+            gap:6px;
+            align-items:end;
+        }
+
+        .news-row label{
+            display:block;
+            grid-column:1;
+            margin-bottom:2px;
+            font-weight:500;
+            font-size:13px;
+        }
+
+        .news-row input{
+            width:100%;
+            box-sizing:border-box;
+            padding:6px;
+            border:1px solid #ddd;
+            border-radius:4px;
+            font-size:14px;
+            grid-column:1;
+        }
+
+        .news-row div{
+            grid-column:2;
+            grid-row:1 / span 2;
+            padding:6px;
+            text-align:center;
+            border-radius:4px;
+            font-weight:bold;
+            height:32px;
+            line-height:20px;
+            box-sizing:border-box;
+        }
+
+        .news-check{
+            display:grid;
+            grid-template-columns:1fr 60px;
+            gap:6px;
+            align-items:center;
+        }
+
+        .news-check label{
+            display:flex;
+            align-items:center;
+            gap:6px;
+            font-weight:500;
+            font-size:13px;
+        }
+
+        .news-check input{
+            width:18px;
+            height:18px;
+        }
+
+        .news-check div{
+            padding:6px;
+            text-align:center;
+            font-weight:bold;
+        }
+
+    `;
+
+    document.head.appendChild(style);
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(caixa);
+
+
+    // ==========================================
+    // CALCULAR
+    // ==========================================
+
+    function calcular(){
+
+        const pas =
+            num(document.getElementById(
+                "celk-news-pas"
+            ).value);
+
+        const pad =
+            num(document.getElementById(
+                "celk-news-pad"
+            ).value);
+
+        const fc =
+            num(document.getElementById(
+                "celk-news-fc"
+            ).value);
+
+        const fr =
+            num(document.getElementById(
+                "celk-news-fr"
+            ).value);
+
+        const tax =
+            num(document.getElementById(
+                "celk-news-tax"
+            ).value);
+
+        const spo2 =
+            num(document.getElementById(
+                "celk-news-spo2"
+            ).value);
+
+        const o2 =
+            document.getElementById(
+                "celk-news-o2"
+            ).checked;
+
+        const anc =
+            document.getElementById(
+                "celk-news-anc"
+            ).checked;
+
+
+        const r = {
+
+            pas:
+                pas !== null
+                    ? pontos("pas",pas)
+                    : 0,
+
+            fc:
+                fc !== null
+                    ? pontos("fc",fc)
+                    : 0,
+
+            fr:
+                fr !== null
+                    ? pontos("fr",fr)
+                    : 0,
+
+            tax:
+                tax !== null
+                    ? pontos("tax",tax)
+                    : 0,
+
+            spo2:
+                spo2 !== null
+                    ? pontos("spo2",spo2)
+                    : 0,
+
+            o2:
+                o2 ? 2 : 0,
+
+            anc:
+                anc ? 3 : 0
+        };
+
+
+        r.total =
+            r.pas +
+            r.fc +
+            r.fr +
+            r.tax +
+            r.spo2 +
+            r.o2 +
+            r.anc;
+
+
+        r.pam =
+            pas !== null &&
+            pad !== null
+                ? Math.round(
+                    (pas + 2 * pad) / 3
+                )
+                : null;
+
+
+        r.valores = {
+            pas,
+            pad,
+            fc,
+            fr,
+            tax,
+            spo2,
+            o2,
+            anc
+        };
+
+
+        return r;
+
+    }
+
+
+    // ==========================================
+    // ATUALIZAR TELA
+    // ==========================================
+
+    function atualizar(){
+
+        const r = calcular();
+
+        const ids = {
+
+            pas:"celk-news-pts-pas",
+            fc:"celk-news-pts-fc",
+            fr:"celk-news-pts-fr",
+            tax:"celk-news-pts-tax",
+            spo2:"celk-news-pts-spo2",
+            o2:"celk-news-pts-o2",
+            anc:"celk-news-pts-anc"
+
+        };
+
+
+        Object.keys(ids).forEach(k=>{
+
+            const el =
+                document.getElementById(ids[k]);
+
+            if(el){
+
+                el.textContent =
+                    r[k];
+
+            }
+
+        });
+
+
+        const pam =
+            document.getElementById(
+                "celk-news-pam"
+            );
+
+        if(pam){
+
+            pam.textContent =
+                r.pam !== null
+                    ? "PAM: " + r.pam
+                    : "PAM: -";
+
+        }
+
+
+        const v =
+            r.valores;
+
+
+        const completo =
+            v.pas !== null &&
+            v.pad !== null &&
+            v.fc !== null &&
+            v.fr !== null &&
+            v.tax !== null &&
+            v.spo2 !== null;
+
+
+        const total =
+            document.getElementById(
+                "celk-news-total"
+            );
+
+        if(total){
+
+            total.textContent =
+                completo
+                    ? r.total
+                    : "-";
+
+        }
+
+    }
+
+
+    [
+        "celk-news-pas",
+        "celk-news-pad",
+        "celk-news-fc",
+        "celk-news-fr",
+        "celk-news-tax",
+        "celk-news-spo2"
+    ].forEach(id=>{
+
+        document.getElementById(id)
+            ?.addEventListener(
+                "input",
+                atualizar
+            );
+
+    });
+
+
+    [
+        "celk-news-o2",
+        "celk-news-anc"
+    ].forEach(id=>{
+
+        document.getElementById(id)
+            ?.addEventListener(
+                "change",
+                atualizar
+            );
+
+    });
+
+
+    // ==========================================
+    // FECHAR
+    // ==========================================
+
+    function fechar(){
+
+        overlay.remove();
+        caixa.remove();
+
+        style.remove();
+
+        document.removeEventListener(
+            "keydown",
+            tecla
+        );
+
+    }
+
+
+    function tecla(e){
+
+        if(e.key === "Escape"){
+
+            e.preventDefault();
+
+            fechar();
+
+        }
+
+    }
+
+
+    document.addEventListener(
+        "keydown",
+        tecla
+    );
+
+
+    overlay.onclick = function(e){
+
+        if(e.target === overlay){
+
+            fechar();
+
+        }
+
+    };
+
+
+    document.getElementById(
+        "celk-news-cancel"
+    ).onclick = fechar;
+
+
+    // ==========================================
+    // TEXTO PARA EVOLUÇÃO
+    // ==========================================
+
+    function gerarTexto(r){
+
+        return (
+            "# NEWS: " +
+            r.total +
+            " pontos " +
+            "(PAS:" + r.pas +
+            " - FC:" + r.fc +
+            " - FR:" + r.fr +
+            " - TAX:" + r.tax +
+            " - SPO2:" + r.spo2 +
+            " - O2:" +
+            (r.o2 ? "Sim" : "Não") +
+            " - ANC:" +
+            (r.anc ? "Sim" : "Não") +
+            ")"
+        );
+
+    }
+
+
+    // ==========================================
+    // SALVAR
+    // ==========================================
+
+    document.getElementById(
+        "celk-news-save"
+    ).onclick = function(){
+
+        const r = calcular();
+
+        const v = r.valores;
+
+        if(
+            v.pas === null ||
+            v.pad === null ||
+            v.fc === null ||
+            v.fr === null ||
+            v.tax === null ||
+            v.spo2 === null
+        ){
+
+            alert(
+                "Preencha PAS, PAD, FC, FR, TAX e SpO2."
+            );
+
+            return;
+        }
+
+
+        const texto =
+            gerarTexto(r);
+
+
+        editor.focus();
+
+        editor.execCommand(
+            "mceInsertContent",
+            false,
+            "<p>" +
+            texto +
+            "</p>"
+        );
+
+
+        fechar();
+
+    };
+
+
+    // ==========================================
+    // +
+    // ==========================================
+
+    document.getElementById(
+        "celk-news-append"
+    ).onclick = function(){
+
+        const r = calcular();
+
+        const v = r.valores;
+
+        if(
+            v.pas === null ||
+            v.pad === null ||
+            v.fc === null ||
+            v.fr === null ||
+            v.tax === null ||
+            v.spo2 === null
+        ){
+
+            alert(
+                "Preencha PAS, PAD, FC, FR, TAX e SpO2."
+            );
+
+            return;
+        }
+
+
+        const texto =
+            gerarTexto(r);
+
+
+        editor.focus();
+
+        editor.execCommand(
+            "mceInsertContent",
+            false,
+            "<p><br>" +
+            texto +
+            "</p>"
+        );
+
+
+        fechar();
+
+    };
+
+
+    // ==========================================
+    // INICIAR
+    // ==========================================
+
+    atualizar();
+
+    setTimeout(function(){
+
+        document.getElementById(
+            "celk-news-pas"
+        )?.focus();
+
+    },100);
+
+}
+
 
 //--------------------------------------------------
 // INICIALIZA
@@ -2080,6 +3089,5 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
-
 
 
