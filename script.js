@@ -2371,7 +2371,9 @@ function aplicarLayoutAssinaturaAtestado(comCid){
     const alvos = localizarAlvosEditorAtestado();
 
     if(!alvos.length){
-        console.warn("[CELK Helper V32] Não encontrei o editor para ajustar assinatura.");
+        console.warn(
+            "[CELK Helper V32] Não encontrei o editor para ajustar assinatura."
+        );
         return false;
     }
 
@@ -2381,257 +2383,221 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
         const el = alvo.elemento;
 
-        if(!el || !el.innerHTML){
+        if(!el){
             return;
         }
 
         // --------------------------------------------------
-        // FUNÇÕES AUXILIARES
+        // SEM CID:
+        // Remove de forma robusta toda a seção de autorização/
+        // assinatura/dados do paciente.
+        //
+        // O modelo pode mudar a forma como os elementos são
+        // separados. Por isso NÃO dependemos somente de um
+        // bloco começando com "EU,".
         // --------------------------------------------------
+        if(!comCid){
 
-        const textoEl = (node) =>
-            normalizarAtestadoTexto(
-                node?.innerText ||
-                node?.textContent ||
+            const todos = [
+                ...el.querySelectorAll("p, div, li, td, section, br")
+            ];
+
+            let iniciouPaciente = false;
+
+            todos.forEach(no => {
+
+                if(!no || !no.parentNode){
+                    return;
+                }
+
+                const texto = normalizarAtestadoTexto(
+                    no.innerText || no.textContent
+                );
+
+                const ehInicioPaciente =
+                    texto.startsWith("EU,") &&
+                    (
+                        texto.includes("AUTORIZO A DIVULGACAO DO CID") ||
+                        texto.includes("AUTORIZO A DIVULGAÇÃO DO CID") ||
+                        texto.includes("AUTORIZO A DIVULGACAO") ||
+                        texto.includes("AUTORIZO A DIVULGAÇÃO")
+                    );
+
+                const ehAssinaturaPaciente =
+                    texto.includes("ASSINATURA PACIENTE") ||
+                    texto.includes("ASSINATURA DO PACIENTE");
+
+                const ehDadoPaciente =
+                    texto.startsWith("EMAIL:") ||
+                    texto.startsWith("TELEFONE:") ||
+                    texto.startsWith("ENDEREÇO:") ||
+                    texto.startsWith("ENDERECO:") ||
+                    texto.includes("SEDE IDEAS");
+
+                if(ehInicioPaciente){
+                    iniciouPaciente = true;
+                }
+
+                if(iniciouPaciente && (
+                    ehInicioPaciente ||
+                    ehAssinaturaPaciente ||
+                    ehDadoPaciente ||
+                    texto === ""
+                )){
+                    no.remove();
+                    aplicado = true;
+                }
+
+            });
+
+            // --------------------------------------------------
+            // FALLBACK:
+            // Se o CELK colocou tudo em um único HTML/texto,
+            // corta diretamente do "EU," até a assinatura médica.
+            // --------------------------------------------------
+            let html = el.innerHTML;
+            const htmlOriginal = html;
+
+            html = html.replace(
+                /<[^>]*>\s*EU,.*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA)/is,
                 ""
             );
 
-        const contemMedico = (node) => {
-            const t = textoEl(node);
-            return (
-                t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
-                /CRM\s*30235/i.test(t)
-            );
-        };
-
-        // --------------------------------------------------
-        // 1) SEM CID:
-        //    REMOVE DE FORMA ROBUSTA TODA A ÁREA DE
-        //    AUTORIZAÇÃO/ASSINATURA/DADOS DO PACIENTE.
-        //
-        //    O problema da versão anterior era depender de:
-        //      "EU," + "AUTORIZO..."
-        //
-        //    O CELK pode montar esses trechos em elementos
-        //    diferentes e ainda deixar <p> vazios, que viram
-        //    exatamente o "espaço de assinatura" que aparece.
-        // --------------------------------------------------
-
-        if(!comCid){
-
-            const blocos = [
-                ...el.querySelectorAll(
-                    "p, div, li, td, section, span"
-                )
-            ];
-
-            // Localiza o bloco MÉDICO ANTES de remover qualquer coisa.
-            // Isso serve como ponto final seguro da remoção.
-            const blocoMedico = blocos.find(contemMedico);
-
-            // Procura o início da seção do paciente.
-            // Aceita várias formas que o CELK pode usar.
-            const inicioPaciente = blocos.find(b => {
-
-                const t = textoEl(b);
-
-                if(!t || contemMedico(b)){
-                    return false;
-                }
-
-                return (
-                    t.includes("AUTORIZO A DIVULGACAO DO CID") ||
-                    t.includes("AUTORIZO A DIVULGAÇÃO DO CID") ||
-                    (
-                        t.includes("ASSINATURA PACIENTE") &&
-                        !t.includes("CRM 30235")
-                    ) ||
-                    (
-                        t.includes("ASSINATURA DO PACIENTE") &&
-                        !t.includes("CRM 30235")
-                    ) ||
-                    (
-                        t.startsWith("EU,") &&
-                        (
-                            t.includes("CID") ||
-                            t.includes("AUTORIZ")
-                        )
-                    )
-                );
-            });
-
-            if(inicioPaciente && blocoMedico){
-
-                // Só executa se a seção do paciente estiver antes
-                // da assinatura médica no DOM.
-                const posicao =
-                    inicioPaciente.compareDocumentPosition(
-                        blocoMedico
-                    );
-
-                const pacienteAntesDoMedico =
-                    !!(
-                        posicao &
-                        Node.DOCUMENT_POSITION_FOLLOWING
-                    );
-
-                if(pacienteAntesDoMedico){
-
-                    try{
-
-                        // Remove desde o início da seção do paciente
-                        // até imediatamente antes do bloco médico.
-                        const range = document.createRange();
-
-                        range.setStartBefore(inicioPaciente);
-                        range.setEndBefore(blocoMedico);
-                        range.deleteContents();
-
-                        aplicado = true;
-
-                        console.log(
-                            "[CELK Helper V32] Seção de assinatura/autorização do paciente REMOVIDA."
-                        );
-
-                    }catch(e){
-
-                        console.warn(
-                            "[CELK Helper V32] Falha ao remover seção do paciente por Range:",
-                            e
-                        );
-                    }
-                }
-
-            }else if(inicioPaciente){
-
-                // Fallback quando não foi possível localizar o
-                // bloco médico: remove a seção pelo HTML, mas
-                // preserva o restante do documento.
-                let html = el.innerHTML;
-
-                const htmlAntes = html;
-
-                html = html.replace(
-                    /(?:EU,\s*|AUTORIZO\s+A\s+DIVULGACAO\s+DO\s+CID|AUTORIZO\s+A\s+DIVULGAÇÃO\s+DO\s+CID).*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA)/is,
-                    ""
-                );
-
-                if(html !== htmlAntes){
-                    el.innerHTML = html;
-                    aplicado = true;
-
-                    console.log(
-                        "[CELK Helper V32] Fallback HTML: seção do paciente removida."
-                    );
-                }
-            }
-
-            // --------------------------------------------------
-            // LIMPEZA CRÍTICA:
-            // remove <p>/<div>/<li>/<td> vazios imediatamente
-            // antes do bloco da assinatura médica.
-            //
-            // Isso elimina o "buraco" que o modelo do CELK deixa
-            // mesmo depois de remover a assinatura do paciente.
-            // --------------------------------------------------
-
-            const medicoAtualizado = [
-                ...el.querySelectorAll("p, div, li, td, section")
-            ].find(contemMedico);
-
-            if(medicoAtualizado){
-
-                let anterior = medicoAtualizado.previousElementSibling;
-
-                while(anterior){
-
-                    const txt = textoEl(anterior);
-
-                    const somenteEspaco =
-                        !txt &&
-                        !(
-                            anterior.querySelector &&
-                            anterior.querySelector(
-                                "img, table, input, textarea, canvas"
-                            )
-                        );
-
-                    if(!somenteEspaco){
-                        break;
-                    }
-
-                    const remover = anterior;
-                    anterior = anterior.previousElementSibling;
-
-                    remover.remove();
-                    aplicado = true;
-                }
-            }
-        }
-
-        // --------------------------------------------------
-        // 2) ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA.
-        //    Aplica nos dois modelos, COM E SEM CID.
-        //
-        //    Usa ID para nunca acumular vários espaços se o
-        //    CELK reconstruir o editor ou a função for chamada
-        //    novamente.
-        // --------------------------------------------------
-
-        const blocosMedicoFinal = [
-            ...el.querySelectorAll("p, div, li, td, section")
-        ];
-
-        const blocoMedicoFinal = blocosMedicoFinal.find(contemMedico);
-
-        if(blocoMedicoFinal){
-
-            // Remove eventual espaço criado anteriormente pela
-            // versão antiga do script, evitando duplicação.
-            [
-                ...el.querySelectorAll(
-                    "#celk-espaco-assinatura-medica"
-                )
-            ].forEach(x => x.remove());
-
-            const espaco = document.createElement("p");
-
-            espaco.id = "celk-espaco-assinatura-medica";
-
-            espaco.style.cssText =
-                "margin:0; line-height:1.2; height:120px;";
-
-            espaco.innerHTML = "&nbsp;";
-
-            blocoMedicoFinal.parentNode.insertBefore(
-                espaco,
-                blocoMedicoFinal
+            html = html.replace(
+                /EU,.*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA\s*CRM\s*30235)/is,
+                ""
             );
 
-            aplicado = true;
-
-        }else{
-
-            // Fallback caso o nome/CRM esteja diretamente no HTML.
-            const htmlOriginal = el.innerHTML;
-
-            const espacoAssinatura =
-                '<p id="celk-espaco-assinatura-medica" ' +
-                'style="margin:0; line-height:1.2; height:120px;">' +
-                '&nbsp;</p>';
-
-            el.innerHTML = el.innerHTML.replace(
-                /(RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA\s+CRM\s*30235)/i,
-                espacoAssinatura + "$1"
-            );
-
-            if(el.innerHTML !== htmlOriginal){
+            if(html !== htmlOriginal){
+                el.innerHTML = html;
                 aplicado = true;
             }
+
+            // --------------------------------------------------
+            // LIMPEZA DOS ESPAÇOS VAZIOS:
+            // O problema visual vinha de <p>, <div> e <br>
+            // vazios que permaneciam depois da remoção.
+            // --------------------------------------------------
+            [
+                ...el.querySelectorAll("p, div, li, td, section")
+            ].forEach(no => {
+
+                if(!no.parentNode){
+                    return;
+                }
+
+                const texto = normalizarAtestadoTexto(
+                    no.innerText || no.textContent
+                );
+
+                const htmlNo = String(no.innerHTML || "")
+                    .replace(/&nbsp;/gi,"")
+                    .replace(/<br\s*\/?>/gi,"")
+                    .replace(/\s+/g,"")
+                    .trim();
+
+                // Não remover o bloco do médico.
+                const ehMedico =
+                    texto.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                    texto.includes("CRM 30235");
+
+                if(
+                    !ehMedico &&
+                    texto === "" &&
+                    htmlNo === ""
+                ){
+                    no.remove();
+                    aplicado = true;
+                }
+
+            });
+
+            // Remove BRs isolados antes da assinatura médica.
+            const brs = [...el.querySelectorAll("br")];
+
+            brs.forEach(br => {
+
+                let anterior = br.previousSibling;
+
+                while(anterior && (
+                    anterior.nodeType === Node.TEXT_NODE &&
+                    !anterior.textContent.trim()
+                )){
+                    anterior = anterior.previousSibling;
+                }
+
+                if(anterior && anterior.nodeType === Node.ELEMENT_NODE){
+                    const t = normalizarAtestadoTexto(
+                        anterior.innerText || anterior.textContent
+                    );
+
+                    if(
+                        t.includes("ASSINATURA PACIENTE") ||
+                        t.includes("ASSINATURA DO PACIENTE")
+                    ){
+                        br.remove();
+                    }
+                }
+
+            });
         }
 
         // --------------------------------------------------
-        // 3) SINCRONIZA COM TINYMCE / WICKET
+        // ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA.
+        // Aplica COM CID e SEM CID.
+        // --------------------------------------------------
+
+        const blocosMedico = [
+            ...el.querySelectorAll("p, div, li, td")
+        ];
+
+        const blocoMedico = blocosMedico.find(b => {
+
+            const t = normalizarAtestadoTexto(
+                b.innerText || b.textContent
+            );
+
+            return (
+                t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                t.includes("CRM 30235")
+            );
+
+        });
+
+        if(blocoMedico){
+
+            // Evita duplicar o espaço se o CELK reconstruir o editor.
+            const anterior = blocoMedico.previousElementSibling;
+
+            if(!(
+                anterior &&
+                anterior.getAttribute("data-celk-espaco-assinatura") === "1"
+            )){
+
+                const espaco = document.createElement("p");
+
+                espaco.setAttribute(
+                    "data-celk-espaco-assinatura",
+                    "1"
+                );
+
+                espaco.style.cssText =
+                    "margin:0;line-height:1.2;height:120px;";
+
+                espaco.innerHTML = "&nbsp;";
+
+                blocoMedico.parentNode.insertBefore(
+                    espaco,
+                    blocoMedico
+                );
+
+                aplicado = true;
+            }
+
+        }
+
+        // --------------------------------------------------
+        // SINCRONIZA COM TINYMCE / WICKET
         // --------------------------------------------------
 
         try{
@@ -2659,16 +2625,18 @@ function aplicarLayoutAssinaturaAtestado(comCid){
                             editor.setContent(body.innerHTML);
                             editor.fire("input");
                             editor.fire("change");
+
                         }
 
                     }catch(_){}
+
                 });
+
             }
 
         }catch(_){}
 
         try{
-
             el.dispatchEvent(
                 new Event("input",{bubbles:true})
             );
@@ -2678,6 +2646,7 @@ function aplicarLayoutAssinaturaAtestado(comCid){
             );
 
         }catch(_){}
+
     });
 
     console.log(
@@ -2688,6 +2657,7 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
     return aplicado;
 }
+
 async function prepararAtestado(dias, comCid){
 
     // Guarda somente janelas/abas abertas pelo próprio fluxo do Atestado.
