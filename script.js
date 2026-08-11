@@ -2070,40 +2070,23 @@ function obterNomeMae(){
 
     const texto = document.body.innerText || "";
 
-    // Procura o nome da mãe quando o CELK apresentar
-    // "MÃE:" ou "NOME DA MÃE:" na tela.
     const match = texto.match(
         /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
     );
 
     if(match){
+
         return match[1]
             .replace(/\s+/g," ")
             .trim()
             .toUpperCase();
+
     }
 
     return "NÃO IDENTIFICADO";
 }
-        }
-    }
 
-    // Procura no texto geral da página
-    const tela = document.body.innerText || "";
 
-    const matchTela = tela.match(
-        /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
-    );
-
-    if(matchTela){
-        return matchTela[1]
-            .replace(/\s+/g," ")
-            .trim()
-            .toUpperCase();
-    }
-
-    return "NÃO IDENTIFICADO";
-}
 function montarDeclaracaoAcompanhante(dados){
 
     return `
@@ -2149,9 +2132,11 @@ function montarDeclaracaoAcompanhante(dados){
         </p>
 
         <p style="margin:0;">
-${obterMedicoLogado()}        </p>
+            ${obterMedicoLogado()}
+        </p>
     `;
 }
+
 
 async function prepararDeclaracao(acompanhante){
 
@@ -2257,6 +2242,80 @@ async function prepararDeclaracao(acompanhante){
 
         });
 
+        if(!opcao){
+            throw new Error(
+                acompanhante
+                    ? "Modelo de Declaração de Acompanhante não encontrado."
+                    : "Modelo de Declaração de Comparecimento não encontrado."
+            );
+        }
+
+        tipo.value = opcao.value;
+
+        tipo.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        await new Promise(r =>
+            setTimeout(r,500)
+        );
+
+        const html = acompanhante
+            ? montarDeclaracaoAcompanhante(dados)
+            : montarDeclaracaoPaciente(dados);
+
+        const editores =
+            await esperarEditorDeclaracao(12000);
+
+        if(!editores.length){
+            throw new Error(
+                "Editor da declaração não encontrado."
+            );
+        }
+
+        let preenchido = false;
+
+        for(const alvo of editores){
+
+            if(definirConteudoEditorDeclaracao(
+                alvo.elemento,
+                html
+            )){
+                preenchido = true;
+                break;
+            }
+        }
+
+        if(!preenchido){
+            throw new Error(
+                "Não foi possível preencher o texto da declaração."
+            );
+        }
+
+        console.log(
+            "[CELK Helper V32] DECLARAÇÃO PREENCHIDA COM SUCESSO."
+        );
+
+    }catch(e){
+
+        console.error(
+            "[CELK Helper V32] ERRO NA DECLARAÇÃO:",
+            e
+        );
+
+        alert(
+            "Erro ao preparar declaração:\n\n" +
+            e.message
+        );
+
+    }finally{
+
+        if(overlay){
+            overlay.remove();
+        }
+
+    }
+}
         if(!opcao){
 
             throw new Error(
