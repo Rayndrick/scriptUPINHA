@@ -2245,81 +2245,6 @@ async function prepararDeclaracao(acompanhante){
         if(!opcao){
             throw new Error(
                 acompanhante
-                    ? "Modelo de Declaração de Acompanhante não encontrado."
-                    : "Modelo de Declaração de Comparecimento não encontrado."
-            );
-        }
-
-        tipo.value = opcao.value;
-
-        tipo.dispatchEvent(
-            new Event("change",{bubbles:true})
-        );
-
-        await new Promise(r =>
-            setTimeout(r,500)
-        );
-
-        const html = acompanhante
-            ? montarDeclaracaoAcompanhante(dados)
-            : montarDeclaracaoPaciente(dados);
-
-        const editores =
-            await esperarEditorDeclaracao(12000);
-
-        if(!editores.length){
-            throw new Error(
-                "Editor da declaração não encontrado."
-            );
-        }
-
-        let preenchido = false;
-
-        for(const alvo of editores){
-
-            if(definirConteudoEditorDeclaracao(
-                alvo.elemento,
-                html
-            )){
-                preenchido = true;
-                break;
-            }
-        }
-
-        if(!preenchido){
-            throw new Error(
-                "Não foi possível preencher o texto da declaração."
-            );
-        }
-
-        console.log(
-            "[CELK Helper V32] DECLARAÇÃO PREENCHIDA COM SUCESSO."
-        );
-
-    }catch(e){
-
-        console.error(
-            "[CELK Helper V32] ERRO NA DECLARAÇÃO:",
-            e
-        );
-
-        alert(
-            "Erro ao preparar declaração:\n\n" +
-            e.message
-        );
-
-    }finally{
-
-        if(overlay){
-            overlay.remove();
-        }
-
-    }
-}
-        if(!opcao){
-
-            throw new Error(
-                acompanhante
                     ? "Não encontrei DECLARAÇÃO DE COMPARECIMENTO (ACOMPANHANTE)."
                     : "Não encontrei DECLARAÇÃO DE COMPARECIMENTO."
             );
@@ -2387,7 +2312,6 @@ async function prepararDeclaracao(acompanhante){
             }
         }
 
-        // Espera o editor do documento ficar disponível.
         await new Promise(r =>
             setTimeout(r,500)
         );
@@ -2396,7 +2320,6 @@ async function prepararDeclaracao(acompanhante){
             await esperarEditorDeclaracao(12000);
 
         if(!alvos.length){
-
             throw new Error(
                 "O editor da Declaração não foi encontrado."
             );
@@ -2452,8 +2375,6 @@ async function prepararDeclaracao(acompanhante){
 
     }
 }
-
-function abrirMenuDeclaracao(){
 
     if(document.getElementById("celk-declaracao-overlay")){
         return;
