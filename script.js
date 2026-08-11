@@ -2,7 +2,7 @@
 // CELK HELPER — V27
 // ATESTADO: fluxo direto pelo botão "Novo Documento"
 // =========================================================
-console.log("[CELK Helper] V27 CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+console.log("[CELK Helper V30] V27 CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
 
 (function () {
 
@@ -470,7 +470,7 @@ atestado.onclick=function(e){
     abrirMenuAtestado();
 };
 
-console.log("📜 [CELK Helper] Botão ATESTADO criado.");
+console.log("📜 [CELK Helper V30] Botão ATESTADO criado.");
 
 //--------------------------------------------------
 // BOTÃO NEWS
@@ -823,7 +823,7 @@ function criarBotaoAtestadoRobusto(){
             abrirMenuAtestado();
         }else{
             console.error(
-                "[CELK Helper] função abrirMenuAtestado não encontrada."
+                "[CELK Helper V30] função abrirMenuAtestado não encontrada."
             );
         }
     };
@@ -835,7 +835,7 @@ function criarBotaoAtestadoRobusto(){
     );
 
     console.log(
-        "📜 [CELK Helper] ATESTADO inserido após CID."
+        "📜 [CELK Helper V30] ATESTADO inserido após CID."
     );
 
     return true;
@@ -1168,7 +1168,7 @@ function preencherEvolucao(opcoes = {}){
 
         }catch(e){
             console.warn(
-                "[CELK Helper] erro ao localizar triagem no histórico:",
+                "[CELK Helper V30] erro ao localizar triagem no histórico:",
                 e
             );
         }
@@ -1787,7 +1787,7 @@ function abrirMenuAtestado(){
             botao.id === "celk-atestado-com-cid";
 
         console.log(
-            "[CELK Helper] Botão do Atestado clicado:",
+            "[CELK Helper V30] Botão do Atestado clicado:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -1806,7 +1806,7 @@ function abrirMenuAtestado(){
         }catch(err){
 
             console.error(
-                "[CELK Helper] erro no clique do Atestado:",
+                "[CELK Helper V30] erro no clique do Atestado:",
                 err
             );
 
@@ -1881,61 +1881,194 @@ function substituirDiasNoTexto(texto, dias){
     return novo;
 }
 
+function localizarAlvosEditorAtestado(){
+
+    const encontrados = [];
+    const adicionar = (tipo, elemento, iframe=null) => {
+
+        if(!elemento){
+            return;
+        }
+
+        const texto =
+            elemento.value ??
+            elemento.innerText ??
+            elemento.textContent ??
+            "";
+
+        if(textoTemModeloAtestado(texto)){
+            encontrados.push({
+                tipo,
+                elemento,
+                iframe
+            });
+        }
+    };
+
+    // 1) Textareas e contenteditable da página principal.
+    document.querySelectorAll(
+        "textarea, [contenteditable='true'], " +
+        ".mceContentBody, .mce-content-body"
+    ).forEach(el => adicionar("direto", el));
+
+    // 2) TinyMCE/editores dentro de iframes.
+    document.querySelectorAll("iframe").forEach(iframe => {
+
+        try{
+
+            const doc =
+                iframe.contentDocument ||
+                iframe.contentWindow?.document;
+
+            if(!doc){
+                return;
+            }
+
+            if(doc.body){
+                adicionar("iframe-body", doc.body, iframe);
+            }
+
+            doc.querySelectorAll(
+                "textarea, [contenteditable='true'], " +
+                ".mceContentBody, .mce-content-body"
+            ).forEach(el => {
+                adicionar("iframe-editor", el, iframe);
+            });
+
+        }catch(_){}
+
+    });
+
+    // 3) Caso o CELK use um DIV/P/TD editável sem classe conhecida.
+    document.querySelectorAll(
+        "[contenteditable], div, p, td"
+    ).forEach(el => {
+
+        if(
+            encontrados.some(x => x.elemento === el) ||
+            el.closest("#celk-atestado-overlay")
+        ){
+            return;
+        }
+
+        const texto = el.innerText || el.textContent || "";
+
+        if(
+            textoTemModeloAtestado(texto) &&
+            texto.length < 12000
+        ){
+            adicionar("bloco", el);
+        }
+
+    });
+
+    return encontrados;
+}
+
+function substituirDiasNoHtml(html, dias){
+
+    if(!html){
+        return {
+            alterado:false,
+            html
+        };
+    }
+
+    // O modelo oficial mostrado no CELK:
+    // necessita ____ (  ) dias de afastamento
+    //
+    // Permite espaços, entidades HTML e pequenas variações.
+    let novo = html;
+
+    const padroes = [
+
+        /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
+
+        /_{2,}\s*(?:&nbsp;|\s)*\(\s*(?:&nbsp;|\s)*\)\s*(?=dias\s+de\s+afastamento)/i,
+
+        /_{2,}\s*(?:\(\s*\))?\s*(?=DIAS\s+DE\s+AFASTAMENTO)/i
+
+    ];
+
+    for(const regex of padroes){
+
+        const teste = novo.replace(
+            regex,
+            String(dias)
+        );
+
+        if(teste !== novo){
+            return {
+                alterado:true,
+                html:teste
+            };
+        }
+    }
+
+    return {
+        alterado:false,
+        html:novo
+    };
+}
+
+function substituirDiasEmTextoVisivel(texto, dias){
+
+    if(!texto){
+        return texto;
+    }
+
+    // Mantém o restante do documento exatamente como está.
+    return texto.replace(
+        /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
+        String(dias)
+    );
+}
+
 function preencherDiasNoElementoEditor(el, dias){
 
     if(!el){
         return false;
     }
 
-    const original = el.innerText || el.textContent || "";
+    const textoOriginal =
+        el.value ??
+        el.innerText ??
+        el.textContent ??
+        "";
 
-    if(!textoTemModeloAtestado(original)){
+    if(!textoTemModeloAtestado(textoOriginal)){
         return false;
     }
 
-    const novoTexto = substituirDiasNoTexto(original, dias);
+    // --------------------------------------------------
+    // TEXTAREA / INPUT
+    // --------------------------------------------------
 
-    if(novoTexto === original){
-        console.log(
-            "[CELK Helper V27] Modelo encontrado, mas não achei o espaço dos dias.",
-            original
-        );
-        return false;
-    }
-
-    // Contenteditable.
-    if(el.isContentEditable){
-
-        el.innerHTML = el.innerHTML.replace(
-            /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
-            String(dias)
-        );
-
-        el.dispatchEvent(new InputEvent("input",{
-            bubbles:true,
-            inputType:"insertText",
-            data:String(dias)
-        }));
-
-        el.dispatchEvent(
-            new Event("change",{bubbles:true})
-        );
-
-        return true;
-    }
-
-    // TEXTAREA / INPUT.
     if(
         el.tagName === "TEXTAREA" ||
         el.tagName === "INPUT"
     ){
 
-        const setter = Object.getOwnPropertyDescriptor(
+        const novoTexto =
+            substituirDiasEmTextoVisivel(
+                textoOriginal,
+                dias
+            );
+
+        if(novoTexto === textoOriginal){
+            return false;
+        }
+
+        const proto =
             el.tagName === "TEXTAREA"
                 ? HTMLTextAreaElement.prototype
-                : HTMLInputElement.prototype,
-            "value"
-        )?.set;
+                : HTMLInputElement.prototype;
+
+        const setter =
+            Object.getOwnPropertyDescriptor(
+                proto,
+                "value"
+            )?.set;
 
         if(setter){
             setter.call(el,novoTexto);
@@ -1954,20 +2087,73 @@ function preencherDiasNoElementoEditor(el, dias){
         return true;
     }
 
-    // DIV/TD/P com conteúdo editável.
-    if(
-        el.isContentEditable ||
-        el.getAttribute("contenteditable") === "true"
-    ){
+    // --------------------------------------------------
+    // CONTENTEDITABLE / BODY DE IFRAME / DIV DO EDITOR
+    // --------------------------------------------------
+
+    const htmlOriginal = el.innerHTML || "";
+
+    const resultado =
+        substituirDiasNoHtml(
+            htmlOriginal,
+            dias
+        );
+
+    if(resultado.alterado){
+
+        el.innerHTML = resultado.html;
+
+        try{
+            el.dispatchEvent(
+                new InputEvent("input",{
+                    bubbles:true,
+                    inputType:"insertText",
+                    data:String(dias)
+                })
+            );
+        }catch(_){
+            el.dispatchEvent(
+                new Event("input",{bubbles:true})
+            );
+        }
+
+        el.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        return true;
+    }
+
+    // --------------------------------------------------
+    // FALLBACK: texto puro dentro do elemento.
+    // --------------------------------------------------
+
+    const novoTexto =
+        substituirDiasEmTextoVisivel(
+            textoOriginal,
+            dias
+        );
+
+    if(novoTexto !== textoOriginal){
 
         el.textContent = novoTexto;
 
+        try{
+            el.dispatchEvent(
+                new InputEvent("input",{
+                    bubbles:true,
+                    inputType:"insertText",
+                    data:String(dias)
+                })
+            );
+        }catch(_){
+            el.dispatchEvent(
+                new Event("input",{bubbles:true})
+            );
+        }
+
         el.dispatchEvent(
-            new InputEvent("input",{
-                bubbles:true,
-                inputType:"insertText",
-                data:String(dias)
-            })
+            new Event("change",{bubbles:true})
         );
 
         return true;
@@ -1976,123 +2162,99 @@ function preencherDiasNoElementoEditor(el, dias){
     return false;
 }
 
-function encontrarEditorAtestado(){
-
-    // 1. Editores diretamente na página.
-    const elementos = [
-        ...document.querySelectorAll(
-            "textarea, [contenteditable='true'], " +
-            ".mceContentBody, .mce-content-body, " +
-            ".wysiwyg, .editor"
-        )
-    ];
-
-    for(const el of elementos){
-
-        const texto = el.innerText || el.textContent || el.value || "";
-
-        if(textoTemModeloAtestado(texto)){
-            return {
-                tipo:"direto",
-                elemento:el
-            };
-        }
-    }
-
-    // 2. TinyMCE / editor dentro de iframe.
-    const iframes = [
-        ...document.querySelectorAll("iframe")
-    ];
-
-    for(const iframe of iframes){
-
-        try{
-
-            const doc =
-                iframe.contentDocument ||
-                iframe.contentWindow?.document;
-
-            if(!doc){
-                continue;
-            }
-
-            const body = doc.body;
-
-            if(body && textoTemModeloAtestado(body.innerText || "")){
-                return {
-                    tipo:"iframe",
-                    elemento:body,
-                    iframe
-                };
-            }
-
-        }catch(e){
-            // iframe cross-origin: ignorar.
-        }
-    }
-
-    // 3. Último recurso: procurar blocos de texto visíveis.
-    const blocos = [
-        ...document.querySelectorAll("div, td, p, span")
-    ];
-
-    return blocos.find(el => {
-
-        const texto = el.innerText || "";
-
-        if(!textoTemModeloAtestado(texto)){
-            return false;
-        }
-
-        // Evita pegar um container gigantesco da página inteira.
-        return texto.length < 12000;
-
-    }) ? {
-        tipo:"bloco",
-        elemento:blocos.find(el => {
-            const texto = el.innerText || "";
-            return textoTemModeloAtestado(texto) && texto.length < 12000;
-        })
-    } : null;
-}
-
-async function preencherDiasNoDocumento(dias, timeout=12000){
+async function preencherDiasNoDocumento(dias, timeout=20000){
 
     const inicio = Date.now();
 
     while(Date.now() - inicio < timeout){
 
-        const editor = encontrarEditorAtestado();
+        const alvos =
+            localizarAlvosEditorAtestado();
 
-        if(editor){
+        if(alvos.length){
 
             console.log(
-                "[CELK Helper V27] EDITOR DO ATESTADO ENCONTRADO:",
-                editor.tipo
+                "[CELK Helper V30] ALVOS DO EDITOR DE ATESTADO:",
+                alvos.map(x => x.tipo)
             );
 
-            const ok = preencherDiasNoElementoEditor(
-                editor.elemento,
-                dias
-            );
+            for(const alvo of alvos){
 
-            if(ok){
+                try{
 
-                console.log(
-                    "[CELK Helper V27] DIAS PREENCHIDOS NO DOCUMENTO:",
-                    dias
-                );
+                    const ok =
+                        preencherDiasNoElementoEditor(
+                            alvo.elemento,
+                            dias
+                        );
 
-                return true;
+                    if(ok){
+
+                        console.log(
+                            "[CELK Helper V30] DIAS PREENCHIDOS NO DOCUMENTO:",
+                            dias,
+                            alvo.tipo
+                        );
+
+                        // Se for TinyMCE, tenta sincronizar o conteúdo
+                        // com a instância correspondente.
+                        try{
+
+                            if(
+                                typeof tinymce !== "undefined" &&
+                                tinymce?.editors?.length
+                            ){
+
+                                tinymce.editors.forEach(editor => {
+
+                                    try{
+
+                                        const body =
+                                            editor.getBody?.();
+
+                                        if(
+                                            body &&
+                                            (
+                                                body === alvo.elemento ||
+                                                body.contains?.(alvo.elemento) ||
+                                                alvo.elemento.contains?.(body)
+                                            )
+                                        ){
+                                            editor.setContent(
+                                                body.innerHTML
+                                            );
+                                            editor.fire("change");
+                                        }
+
+                                    }catch(_){}
+
+                                });
+
+                            }
+
+                        }catch(_){}
+
+                        return true;
+                    }
+
+                }catch(err){
+
+                    console.warn(
+                        "[CELK Helper V30] Falha ao preencher alvo:",
+                        alvo.tipo,
+                        err
+                    );
+
+                }
+
             }
         }
 
-        await new Promise(r => setTimeout(r,250));
+        await new Promise(r => setTimeout(r,300));
     }
 
     return false;
 }
-
 
 
 function forcarAtestadoNaMesmaAba(){
@@ -2175,14 +2337,14 @@ function fecharJanelasAuxiliaresAtestado(janelas){
                 janela.close();
 
                 console.log(
-                    "[CELK Helper V29] Aba/janela auxiliar do Atestado fechada."
+                    "[CELK Helper V30] Aba/janela auxiliar do Atestado fechada."
                 );
             }
 
         }catch(e){
 
             console.log(
-                "[CELK Helper V29] Não foi possível fechar a janela auxiliar:",
+                "[CELK Helper V30] Não foi possível fechar a janela auxiliar:",
                 e
             );
 
@@ -2213,7 +2375,7 @@ async function prepararAtestado(dias, comCid){
             janelasAtestado.push(janela);
 
             console.log(
-                "[CELK Helper V29] Janela auxiliar capturada."
+                "[CELK Helper V30] Janela auxiliar capturada."
             );
         }
 
@@ -2223,7 +2385,7 @@ async function prepararAtestado(dias, comCid){
     try{
 
         console.log(
-            "[CELK Helper V29] INICIANDO ATESTADO:",
+            "[CELK Helper V30] INICIANDO ATESTADO:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2305,7 +2467,7 @@ async function prepararAtestado(dias, comCid){
             if(documentos){
 
                 console.log(
-                    "[CELK Helper V29] Abrindo aba DOCUMENTOS."
+                    "[CELK Helper V30] Abrindo aba DOCUMENTOS."
                 );
 
                 documentos.click();
@@ -2325,7 +2487,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V29] CLICANDO EM NOVO DOCUMENTO."
+            "[CELK Helper V30] CLICANDO EM NOVO DOCUMENTO."
         );
 
         // Captura janelas/abas abertas pelo CELK durante este clique.
@@ -2351,7 +2513,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V29] MODAL MODELO DE DOCUMENTO ABERTO."
+            "[CELK Helper V30] MODAL MODELO DE DOCUMENTO ABERTO."
         );
 
         // --------------------------------------------------
@@ -2389,7 +2551,7 @@ async function prepararAtestado(dias, comCid){
         if(!opcao){
 
             console.log(
-                "[CELK Helper V29] OPÇÕES ENCONTRADAS:",
+                "[CELK Helper V30] OPÇÕES ENCONTRADAS:",
                 opcoes.map(o => o.textContent)
             );
 
@@ -2418,7 +2580,7 @@ async function prepararAtestado(dias, comCid){
         );
 
         console.log(
-            "[CELK Helper V29] MODELO SELECIONADO:",
+            "[CELK Helper V30] MODELO SELECIONADO:",
             opcao.textContent
         );
 
@@ -2465,7 +2627,7 @@ async function prepararAtestado(dias, comCid){
             if(confirmar){
 
                 console.log(
-                    "[CELK Helper V29] CONFIRMANDO MODELO."
+                    "[CELK Helper V30] CONFIRMANDO MODELO."
                 );
 
                 confirmar.click();
@@ -2505,7 +2667,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V29] ATESTADO ABERTO E DIAS PREENCHIDOS:",
+            "[CELK Helper V30] ATESTADO ABERTO E DIAS PREENCHIDOS:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2533,7 +2695,7 @@ async function prepararAtestado(dias, comCid){
         }catch(_){}
 
         console.error(
-            "[CELK Helper V29] ERRO NO ATESTADO:",
+            "[CELK Helper V30] ERRO NO ATESTADO:",
             e
         );
 
@@ -2598,7 +2760,7 @@ function localizarCampoDiasAtestado(){
 
         if(campo){
             console.log(
-                "[CELK Helper] Campo OFICIAL de dias localizado:",
+                "[CELK Helper V30] Campo OFICIAL de dias localizado:",
                 campo.id || campo.name
             );
             return campo;
