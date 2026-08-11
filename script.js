@@ -473,6 +473,55 @@ atestado.onclick=function(e){
 console.log("📜 [CELK Helper V32] Botão ATESTADO criado.");
 
 //--------------------------------------------------
+// BOTÃO DECLARAÇÃO
+//--------------------------------------------------
+
+const declaracao = document.createElement("div");
+
+declaracao.id = "celk-helper-declaracao";
+declaracao.innerHTML = "📄 Declaração";
+
+declaracao.style.cssText = `
+display:flex;
+align-items:center;
+justify-content:center;
+
+height:100%;
+
+min-width:165px;
+flex:0 0 165px;
+box-sizing:border-box;
+
+padding:0 18px;
+
+font-size:18px;
+font-weight:bold;
+
+color:#222;
+background:#f8f8f8;
+
+cursor:pointer;
+user-select:none;
+
+border-left:1px solid #d8d8d8;
+`;
+
+declaracao.onmouseover=function(){
+    declaracao.style.background="#ececec";
+};
+
+declaracao.onmouseout=function(){
+    declaracao.style.background="transparent";
+};
+
+declaracao.onclick=function(e){
+    e.stopPropagation();
+    abrirMenuDeclaracao();
+};
+
+console.log("📄 [CELK Helper V32] Botão DECLARAÇÃO criado.");
+
+//--------------------------------------------------
 // BOTÃO NEWS
 //--------------------------------------------------
 
@@ -649,16 +698,17 @@ function atualizarCamposAlta(){
     );
 
 }
-// Ordem fixa da barra: Relatório → CID → Atestado → NEWS → Atualizar
+// Ordem fixa da barra: Relatório → CID → Atestado → Declaração → NEWS → Atualizar
 painel.appendChild(relatorio);
 painel.appendChild(cid);
 painel.appendChild(atestado);
+painel.appendChild(declaracao);
 painel.appendChild(news);
 painel.appendChild(atualizar);
 
 // Garante que o Atestado fique visível mesmo quando a largura da janela
 // for menor que a soma dos botões.
-[relatorio, cid, atestado, news, atualizar].forEach(function(el){
+[relatorio, cid, atestado, declaracao, news, atualizar].forEach(function(el){
     el.style.flexShrink = "0";
 });
 
@@ -1639,6 +1689,790 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
 }
 
 //--------------------------------------------------
+// DECLARAÇÕES — MENU E PREENCHIMENTO
+//--------------------------------------------------
+
+function normalizarTextoDeclaracao(valor){
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g,"")
+        .replace(/[\u200B-\u200D\uFEFF]/g,"")
+        .replace(/\s+/g," ")
+        .trim()
+        .toUpperCase();
+}
+
+function obterDadosPacienteDeclaracao(){
+
+    const tela = document.body.innerText || "";
+
+    // Mesmo padrão já usado no Helper para o cabeçalho do paciente.
+    const cabecalho = tela.match(
+        /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
+    );
+
+    let nome = cabecalho
+        ? cabecalho[1].trim()
+        : "PACIENTE";
+
+    let idadeTexto = cabecalho
+        ? cabecalho[2].trim()
+        : "";
+
+    // Para a declaração, usar somente a idade em anos.
+    const idadeMatch = idadeTexto.match(/(\d+)\s*anos?/i);
+    const idade = idadeMatch ? idadeMatch[1] : idadeTexto;
+
+    // Horário de chegada: prioriza a triagem.
+    let chegada = "";
+
+    const mTriagem = tela.match(
+        /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+    );
+
+    if(mTriagem){
+        chegada = mTriagem[1];
+    }
+
+    // Fallbacks caso o texto da triagem esteja em outro formato.
+    if(!chegada){
+        const mChegada = tela.match(
+            /(?:CHEGADA|ENTRADA)[^\d]{0,40}(\d{2}:\d{2})/i
+        );
+
+        if(mChegada){
+            chegada = mChegada[1];
+        }
+    }
+
+    if(!chegada){
+        chegada = "NÃO IDENTIFICADO";
+    }
+
+    const agora = new Date();
+
+    const data = agora.toLocaleDateString("pt-BR",{
+        day:"2-digit",
+        month:"2-digit",
+        year:"numeric"
+    });
+
+    const saida = agora.toLocaleTimeString("pt-BR",{
+        hour:"2-digit",
+        minute:"2-digit",
+        hourCycle:"h23"
+    });
+
+    return {
+        nome,
+        idade,
+        chegada,
+        saida,
+        data
+    };
+}
+
+function localizarNovoDocumentoDeclaracao(){
+
+    const candidatos = [
+        ...document.querySelectorAll(
+            "button, a, input, div, span"
+        )
+    ];
+
+    return candidatos.find(el => {
+
+        if(el.closest("#celk-declaracao-overlay")){
+            return false;
+        }
+
+        const texto = (
+            el.innerText ||
+            el.value ||
+            el.getAttribute("title") ||
+            el.getAttribute("aria-label") ||
+            ""
+        )
+        .replace(/\s+/g," ")
+        .trim()
+        .toUpperCase();
+
+        if(texto !== "NOVO DOCUMENTO"){
+            return false;
+        }
+
+        const r = el.getBoundingClientRect();
+        const s = getComputedStyle(el);
+
+        return (
+            r.width > 20 &&
+            r.height > 15 &&
+            s.display !== "none" &&
+            s.visibility !== "hidden"
+        );
+    });
+}
+
+function esperarSelectModeloDeclaracao(timeout=12000){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+
+        const procurar = () => {
+
+            const selects = [
+                ...document.querySelectorAll("select")
+            ];
+
+            const encontrado = selects.find(el => {
+
+                const textoOpcoes = [...el.options]
+                    .map(o => normalizarTextoDeclaracao(o.textContent))
+                    .join(" | ");
+
+                return (
+                    textoOpcoes.includes("DECLARACAO DE COMPARECIMENTO")
+                );
+            });
+
+            if(encontrado){
+                resolve(encontrado);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve(null);
+                return;
+            }
+
+            setTimeout(procurar,150);
+        };
+
+        procurar();
+    });
+}
+
+function localizarAlvosEditorDeclaracao(){
+
+    const encontrados = [];
+
+    const adicionar = (elemento, iframe=null) => {
+
+        if(!elemento){
+            return;
+        }
+
+        const texto =
+            elemento.value ??
+            elemento.innerText ??
+            elemento.textContent ??
+            "";
+
+        const normalizado = normalizarTextoDeclaracao(texto);
+
+        if(
+            normalizado.includes("DECLARACAO") ||
+            normalizado.includes("COMPARECIMENTO")
+        ){
+            if(!encontrados.some(x => x.elemento === elemento)){
+                encontrados.push({
+                    elemento,
+                    iframe
+                });
+            }
+        }
+    };
+
+    document.querySelectorAll(
+        "textarea, [contenteditable='true'], " +
+        ".mceContentBody, .mce-content-body"
+    ).forEach(el => adicionar(el));
+
+    document.querySelectorAll("iframe").forEach(iframe => {
+
+        try{
+
+            const doc =
+                iframe.contentDocument ||
+                iframe.contentWindow?.document;
+
+            if(!doc){
+                return;
+            }
+
+            if(doc.body){
+                adicionar(doc.body, iframe);
+            }
+
+            doc.querySelectorAll(
+                "textarea, [contenteditable='true'], " +
+                ".mceContentBody, .mce-content-body"
+            ).forEach(el => adicionar(el, iframe));
+
+        }catch(_){}
+
+    });
+
+    return encontrados;
+}
+
+function esperarEditorDeclaracao(timeout=12000){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+
+        const procurar = () => {
+
+            const alvos = localizarAlvosEditorDeclaracao();
+
+            if(alvos.length){
+                resolve(alvos);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve([]);
+                return;
+            }
+
+            setTimeout(procurar,200);
+        };
+
+        procurar();
+    });
+}
+
+function definirConteudoEditorDeclaracao(elemento, html){
+
+    if(!elemento){
+        return false;
+    }
+
+    // TinyMCE
+    try{
+
+        if(typeof tinymce !== "undefined" && tinymce?.editors?.length){
+
+            const editor = tinymce.editors.find(ed => {
+
+                try{
+                    const body = ed.getBody?.();
+
+                    return (
+                        body === elemento ||
+                        body?.contains?.(elemento) ||
+                        elemento?.contains?.(body)
+                    );
+
+                }catch(_){
+                    return false;
+                }
+
+            });
+
+            if(editor){
+
+                editor.setContent(html);
+                editor.fire("input");
+                editor.fire("change");
+
+                return true;
+            }
+
+        }
+
+    }catch(_){}
+
+    // Editor direto / iframe.
+    try{
+
+        if(
+            elemento.tagName === "TEXTAREA" ||
+            elemento.tagName === "INPUT"
+        ){
+
+            elemento.value =
+                html.replace(/<[^>]+>/g,"");
+
+        }else{
+
+            elemento.innerHTML = html;
+
+        }
+
+        elemento.dispatchEvent(
+            new Event("input",{bubbles:true})
+        );
+
+        elemento.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        return true;
+
+    }catch(e){
+
+        console.error(
+            "[CELK Helper V32] Erro ao preencher declaração:",
+            e
+        );
+
+        return false;
+    }
+}
+
+function montarDeclaracaoPaciente(dados){
+
+    return `
+        <p style="margin:0 0 18px 0;"><strong>DECLARAÇÃO DE COMPARECIMENTO</strong></p>
+
+        <p style="margin:0 0 14px 0;">
+            Declaro, para os devidos fins, que o(a) paciente
+            <strong>${dados.nome}</strong>, esteve nesta unidade para
+            atendimento/consulta médica.
+        </p>
+
+        <p style="margin:0 0 8px 0;">
+            Data: ${dados.data}
+        </p>
+
+        <p style="margin:0 0 8px 0;">
+            Horário de chegada: <strong>${dados.chegada}</strong>
+        </p>
+
+        <p style="margin:0 0 18px 0;">
+            Horário de saída: <strong>${dados.saida}</strong>
+        </p>
+
+        <p style="margin:0;">
+            ( X ) Atendimento / Consulta médica
+        </p>
+
+        <p style="margin-top:80px;">
+            ________________________________________________
+        </p>
+
+        <p style="margin:0;">
+            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
+        </p>
+    `;
+}
+
+function montarDeclaracaoAcompanhante(dados){
+
+    return `
+        <p style="margin:0 0 18px 0;"><strong>DECLARAÇÃO DE COMPARECIMENTO</strong></p>
+
+        <p style="margin:0 0 12px 0;">
+            Nome do Paciente: <strong>${dados.nome}</strong>,
+            Idade: <strong>${dados.idade}</strong>
+        </p>
+
+        <p style="margin:0 0 8px 0;">
+            Grau de Parentesco:
+        </p>
+
+        <p style="margin:0;">( ) Cônjuge ou Companheiro(a)</p>
+        <p style="margin:0;">( X ) Mãe / Pai</p>
+        <p style="margin:0;">( ) Avó / Avô</p>
+        <p style="margin:0;">( ) Irmão / Irmã</p>
+        <p style="margin:0;">( ) Tia / Tio</p>
+        <p style="margin:0 0 16px 0;">( ) Outro</p>
+
+        <p style="margin:0 0 8px 0;">
+            Data: ${dados.data}
+        </p>
+
+        <p style="margin:0 0 8px 0;">
+            Horário de chegada: <strong>${dados.chegada}</strong>
+        </p>
+
+        <p style="margin:0 0 18px 0;">
+            Horário de saída: <strong>${dados.saida}</strong>
+        </p>
+
+        <p style="margin-top:80px;">
+            ________________________________________________
+        </p>
+
+        <p style="margin:0;">
+            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
+        </p>
+    `;
+}
+
+async function prepararDeclaracao(acompanhante){
+
+    const overlay = document.getElementById(
+        "celk-declaracao-overlay"
+    );
+
+    const dados = obterDadosPacienteDeclaracao();
+
+    try{
+
+        console.log(
+            "[CELK Helper V32] INICIANDO DECLARAÇÃO:",
+            acompanhante ? "ACOMPANHANTE" : "PACIENTE",
+            dados
+        );
+
+        let novo = localizarNovoDocumentoDeclaracao();
+
+        if(!novo){
+
+            const documentos = [
+                ...document.querySelectorAll(
+                    "a,button,div,span"
+                )
+            ].find(el => {
+
+                const txt = (
+                    el.innerText ||
+                    el.getAttribute("title") ||
+                    ""
+                )
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+                if(txt !== "DOCUMENTOS"){
+                    return false;
+                }
+
+                const r = el.getBoundingClientRect();
+
+                return r.width > 20 && r.height > 15;
+            });
+
+            if(documentos){
+
+                documentos.click();
+
+                await new Promise(r =>
+                    setTimeout(r,700)
+                );
+
+                novo = localizarNovoDocumentoDeclaracao();
+            }
+        }
+
+        if(!novo){
+            throw new Error(
+                "Não encontrei o botão NOVO DOCUMENTO. " +
+                "Verifique se a aba Documentos está aberta."
+            );
+        }
+
+        novo.click();
+
+        const tipo =
+            await esperarSelectModeloDeclaracao(12000);
+
+        if(!tipo){
+            throw new Error(
+                "O CELK não abriu o modelo de Declaração."
+            );
+        }
+
+        const opcoes = [...tipo.options];
+
+        const opcao = opcoes.find(o => {
+
+            const txt =
+                normalizarTextoDeclaracao(o.textContent);
+
+            if(acompanhante){
+
+                return (
+                    txt.includes(
+                        "DECLARACAO DE COMPARECIMENTO"
+                    ) &&
+                    txt.includes("ACOMPANHANTE")
+                );
+
+            }
+
+            return (
+                txt === "DECLARACAO DE COMPARECIMENTO" ||
+                (
+                    txt.includes(
+                        "DECLARACAO DE COMPARECIMENTO"
+                    ) &&
+                    !txt.includes("ACOMPANHANTE")
+                )
+            );
+
+        });
+
+        if(!opcao){
+
+            throw new Error(
+                acompanhante
+                    ? "Não encontrei DECLARAÇÃO DE COMPARECIMENTO (ACOMPANHANTE)."
+                    : "Não encontrei DECLARAÇÃO DE COMPARECIMENTO."
+            );
+        }
+
+        const setter =
+            Object.getOwnPropertyDescriptor(
+                HTMLSelectElement.prototype,
+                "value"
+            )?.set;
+
+        if(setter){
+            setter.call(tipo, opcao.value);
+        }else{
+            tipo.value = opcao.value;
+        }
+
+        tipo.dispatchEvent(
+            new Event("input",{bubbles:true})
+        );
+
+        tipo.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        const modal =
+            encontrarModalDoSelect(tipo);
+
+        if(modal){
+
+            const botoes = [
+                ...modal.querySelectorAll(
+                    "button, input[type='button'], " +
+                    "input[type='submit'], a"
+                )
+            ];
+
+            const confirmar = botoes.find(btn => {
+
+                const txt = (
+                    btn.innerText ||
+                    btn.value ||
+                    btn.getAttribute("title") ||
+                    btn.getAttribute("alt") ||
+                    ""
+                )
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+                return [
+                    "OK",
+                    "CONFIRMAR",
+                    "CONTINUAR",
+                    "SELECIONAR",
+                    "CRIAR",
+                    "ABRIR",
+                    "PROSSEGUIR"
+                ].includes(txt);
+
+            });
+
+            if(confirmar){
+                confirmar.click();
+            }
+        }
+
+        // Espera o editor do documento ficar disponível.
+        await new Promise(r =>
+            setTimeout(r,500)
+        );
+
+        const alvos =
+            await esperarEditorDeclaracao(12000);
+
+        if(!alvos.length){
+
+            throw new Error(
+                "O editor da Declaração não foi encontrado."
+            );
+        }
+
+        const html = acompanhante
+            ? montarDeclaracaoAcompanhante(dados)
+            : montarDeclaracaoPaciente(dados);
+
+        let preenchido = false;
+
+        for(const alvo of alvos){
+
+            if(
+                definirConteudoEditorDeclaracao(
+                    alvo.elemento,
+                    html
+                )
+            ){
+                preenchido = true;
+            }
+
+        }
+
+        if(!preenchido){
+            throw new Error(
+                "Não consegui preencher o editor da Declaração."
+            );
+        }
+
+        console.log(
+            "[CELK Helper V32] DECLARAÇÃO PREENCHIDA:",
+            acompanhante ? "ACOMPANHANTE" : "PACIENTE"
+        );
+
+    }catch(e){
+
+        console.error(
+            "[CELK Helper V32] ERRO NA DECLARAÇÃO:",
+            e
+        );
+
+        alert(
+            "Erro ao abrir a Declaração:\n\n" +
+            (e?.message || e)
+        );
+
+    }finally{
+
+        if(overlay && overlay.parentNode){
+            overlay.remove();
+        }
+
+    }
+}
+
+function abrirMenuDeclaracao(){
+
+    if(document.getElementById("celk-declaracao-overlay")){
+        return;
+    }
+
+    const overlay = document.createElement("div");
+
+    overlay.id = "celk-declaracao-overlay";
+
+    overlay.style.cssText = `
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.45);
+        z-index:100000000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-family:Segoe UI,Arial,sans-serif;
+    `;
+
+    const caixa = document.createElement("div");
+
+    caixa.style.cssText = `
+        width:390px;
+        max-width:90vw;
+        background:#fff;
+        border-radius:8px;
+        box-shadow:0 8px 30px rgba(0,0,0,.35);
+        padding:22px;
+        box-sizing:border-box;
+    `;
+
+    caixa.innerHTML = `
+        <div style="
+            font-size:20px;
+            font-weight:700;
+            margin-bottom:18px;
+        ">
+            📄 DECLARAÇÃO
+        </div>
+
+        <div style="
+            font-size:14px;
+            margin-bottom:14px;
+            color:#555;
+        ">
+            Selecione o tipo de declaração:
+        </div>
+
+        <div style="
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+        ">
+
+            <button
+                id="celk-declaracao-paciente"
+                style="
+                    padding:13px;
+                    border:none;
+                    border-radius:5px;
+                    background:#2563eb;
+                    color:#fff;
+                    font-weight:700;
+                    font-size:15px;
+                    cursor:pointer;
+                "
+            >
+                DECLARAÇÃO PACIENTE
+            </button>
+
+            <button
+                id="celk-declaracao-acompanhante"
+                style="
+                    padding:13px;
+                    border:1px solid #aaa;
+                    border-radius:5px;
+                    background:#f5f5f5;
+                    color:#222;
+                    font-weight:700;
+                    font-size:15px;
+                    cursor:pointer;
+                "
+            >
+                DECLARAÇÃO ACOMPANHANTE
+            </button>
+
+        </div>
+    `;
+
+    overlay.appendChild(caixa);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", function(e){
+
+        if(e.target === overlay){
+            overlay.remove();
+        }
+
+    });
+
+    overlay.addEventListener("click", async function(e){
+
+        const botao = e.target.closest(
+            "#celk-declaracao-paciente, " +
+            "#celk-declaracao-acompanhante"
+        );
+
+        if(!botao){
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        botao.disabled = true;
+        botao.style.opacity = "0.6";
+        botao.textContent = "ABRINDO...";
+
+        await prepararDeclaracao(
+            botao.id === "celk-declaracao-acompanhante"
+        );
+
+    }, true);
+
+}
+
+//--------------------------------------------------
 // ATESTADO MÉDICO — MENU
 //--------------------------------------------------
 
@@ -2387,97 +3221,28 @@ function aplicarLayoutAssinaturaAtestado(comCid){
             return;
         }
 
-        // --------------------------------------------------
-        // SEM CID:
-        // Remove de forma robusta toda a seção de autorização/
-        // assinatura/dados do paciente.
+        // ==================================================
+        // SEM CID
+        // ==================================================
         //
-        // O modelo pode mudar a forma como os elementos são
-        // separados. Por isso NÃO dependemos somente de um
-        // bloco começando com "EU,".
-        // --------------------------------------------------
+        // O modelo IDEAS continua trazendo a parte do paciente
+        // depois da assinatura médica. Portanto, em SEM CID,
+        // fazemos um corte definitivo:
+        //
+        // DATA
+        // [espaço para carimbo]
+        // RAYNDRICK... CRM 30235
+        // -------------------------
+        //
+        // e eliminamos tudo que vier depois da primeira assinatura
+        // médica. Isso impede que o nome do paciente e a segunda
+        // assinatura médica reapareçam.
+        // ==================================================
+
         if(!comCid){
 
-            const todos = [
-                ...el.querySelectorAll("p, div, li, td, section, br")
-            ];
-
-            let iniciouPaciente = false;
-
-            todos.forEach(no => {
-
-                if(!no || !no.parentNode){
-                    return;
-                }
-
-                const texto = normalizarAtestadoTexto(
-                    no.innerText || no.textContent
-                );
-
-                const ehInicioPaciente =
-                    texto.startsWith("EU,") &&
-                    (
-                        texto.includes("AUTORIZO A DIVULGACAO DO CID") ||
-                        texto.includes("AUTORIZO A DIVULGAÇÃO DO CID") ||
-                        texto.includes("AUTORIZO A DIVULGACAO") ||
-                        texto.includes("AUTORIZO A DIVULGAÇÃO")
-                    );
-
-                const ehAssinaturaPaciente =
-                    texto.includes("ASSINATURA PACIENTE") ||
-                    texto.includes("ASSINATURA DO PACIENTE");
-
-                const ehDadoPaciente =
-                    texto.startsWith("EMAIL:") ||
-                    texto.startsWith("TELEFONE:") ||
-                    texto.startsWith("ENDEREÇO:") ||
-                    texto.startsWith("ENDERECO:") ||
-                    texto.includes("SEDE IDEAS");
-
-                if(ehInicioPaciente){
-                    iniciouPaciente = true;
-                }
-
-                if(iniciouPaciente && (
-                    ehInicioPaciente ||
-                    ehAssinaturaPaciente ||
-                    ehDadoPaciente ||
-                    texto === ""
-                )){
-                    no.remove();
-                    aplicado = true;
-                }
-
-            });
-
-            // --------------------------------------------------
-            // FALLBACK:
-            // Se o CELK colocou tudo em um único HTML/texto,
-            // corta diretamente do "EU," até a assinatura médica.
-            // --------------------------------------------------
-            let html = el.innerHTML;
-            const htmlOriginal = html;
-
-            html = html.replace(
-                /<[^>]*>\s*EU,.*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA)/is,
-                ""
-            );
-
-            html = html.replace(
-                /EU,.*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA\s*CRM\s*30235)/is,
-                ""
-            );
-
-            if(html !== htmlOriginal){
-                el.innerHTML = html;
-                aplicado = true;
-            }
-
-            // --------------------------------------------------
-            // LIMPEZA DOS ESPAÇOS VAZIOS:
-            // O problema visual vinha de <p>, <div> e <br>
-            // vazios que permaneciam depois da remoção.
-            // --------------------------------------------------
+            // Primeiro remove a autorização/dados do paciente quando
+            // esses blocos estiverem claramente identificáveis.
             [
                 ...el.querySelectorAll("p, div, li, td, section")
             ].forEach(no => {
@@ -2486,25 +3251,16 @@ function aplicarLayoutAssinaturaAtestado(comCid){
                     return;
                 }
 
-                const texto = normalizarAtestadoTexto(
+                const t = normalizarAtestadoTexto(
                     no.innerText || no.textContent
                 );
 
-                const htmlNo = String(no.innerHTML || "")
-                    .replace(/&nbsp;/gi,"")
-                    .replace(/<br\s*\/?>/gi,"")
-                    .replace(/\s+/g,"")
-                    .trim();
-
-                // Não remover o bloco do médico.
-                const ehMedico =
-                    texto.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
-                    texto.includes("CRM 30235");
-
                 if(
-                    !ehMedico &&
-                    texto === "" &&
-                    htmlNo === ""
+                    t.startsWith("EU,") &&
+                    (
+                        t.includes("AUTORIZO A DIVULGACAO") ||
+                        t.includes("AUTORIZO A DIVULGAÇÃO")
+                    )
                 ){
                     no.remove();
                     aplicado = true;
@@ -2512,40 +3268,180 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
             });
 
-            // Remove BRs isolados antes da assinatura médica.
-            const brs = [...el.querySelectorAll("br")];
+            // Localiza TODAS as ocorrências da assinatura médica.
+            const blocosMedico = [
+                ...el.querySelectorAll("p, div, li, td")
+            ].filter(no => {
 
-            brs.forEach(br => {
+                const t = normalizarAtestadoTexto(
+                    no.innerText || no.textContent
+                );
 
-                let anterior = br.previousSibling;
+                return (
+                    t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                    t.includes("CRM 30235")
+                );
 
-                while(anterior && (
-                    anterior.nodeType === Node.TEXT_NODE &&
-                    !anterior.textContent.trim()
-                )){
-                    anterior = anterior.previousSibling;
+            });
+
+            // A PRIMEIRA ocorrência é a assinatura médica correta.
+            // Tudo que vem depois pertence à seção do paciente/
+            // assinatura duplicada do modelo.
+            const blocoMedico = blocosMedico[0];
+
+            if(blocoMedico){
+
+                const pai = blocoMedico.parentElement;
+
+                if(pai){
+
+                    const filhos = [...pai.children];
+                    const indiceMedico = filhos.indexOf(blocoMedico);
+
+                    if(indiceMedico >= 0){
+
+                        for(
+                            let i = filhos.length - 1;
+                            i > indiceMedico;
+                            i--
+                        ){
+
+                            const no = filhos[i];
+
+                            // Se o próprio bloco médico contém elementos
+                            // internos, não mexemos nele.
+                            if(no === blocoMedico){
+                                continue;
+                            }
+
+                            no.remove();
+                            aplicado = true;
+                        }
+
+                    }
                 }
 
-                if(anterior && anterior.nodeType === Node.ELEMENT_NODE){
-                    const t = normalizarAtestadoTexto(
-                        anterior.innerText || anterior.textContent
-                    );
+                // --------------------------------------------------
+                // Remove também qualquer conteúdo textual que tenha
+                // ficado depois do bloco médico no mesmo elemento-pai.
+                // --------------------------------------------------
 
-                    if(
-                        t.includes("ASSINATURA PACIENTE") ||
-                        t.includes("ASSINATURA DO PACIENTE")
-                    ){
-                        br.remove();
+                let encontrouMedico = false;
+
+                [...pai.childNodes].forEach(no => {
+
+                    if(no === blocoMedico){
+                        encontrouMedico = true;
+                        return;
                     }
+
+                    if(encontrouMedico){
+                        no.remove();
+                        aplicado = true;
+                    }
+
+                });
+
+                // --------------------------------------------------
+                // Coloca UMA linha de assinatura abaixo do médico.
+                // --------------------------------------------------
+
+                const linha = document.createElement("p");
+
+                linha.setAttribute(
+                    "data-celk-linha-assinatura",
+                    "1"
+                );
+
+                linha.style.cssText =
+                    "margin:0;line-height:1.2;height:auto;";
+
+                linha.textContent =
+                    "________________________________________";
+
+                blocoMedico.parentNode.appendChild(linha);
+
+                aplicado = true;
+            }
+
+            // --------------------------------------------------
+            // Fallback: se a assinatura médica não foi encontrada
+            // como bloco, corta pelo HTML a partir da segunda ocorrência
+            // do nome do paciente/médico.
+            // --------------------------------------------------
+
+            else{
+
+                let html = el.innerHTML;
+
+                const nomeMedico =
+                    "RAYNDRICK\\s+KELRYN\\s+ASSIS\\s+LIMA\\s*CRM\\s*30235";
+
+                // Mantém somente a primeira ocorrência do médico e
+                // remove o restante da seção.
+                const partes = html.split(
+                    new RegExp(
+                        "(RAYNDRICK\\s+KELRYN\\s+ASSIS\\s+LIMA\\s*CRM\\s*30235)",
+                        "ig"
+                    )
+                );
+
+                if(partes.length >= 3){
+
+                    html =
+                        partes[0] +
+                        partes[1] +
+                        partes[2];
+
+                    el.innerHTML = html;
+
+                    aplicado = true;
+                }
+            }
+
+            // --------------------------------------------------
+            // Limpa espaços vazios que o editor possa ter deixado.
+            // NÃO remove o bloco médico.
+            // --------------------------------------------------
+
+            [
+                ...el.querySelectorAll("p, div, li, td, section")
+            ].forEach(no => {
+
+                if(!no.parentNode){
+                    return;
+                }
+
+                const t = normalizarAtestadoTexto(
+                    no.innerText || no.textContent
+                );
+
+                const vazio =
+                    t === "" &&
+                    String(no.innerHTML || "")
+                        .replace(/&nbsp;/gi,"")
+                        .replace(/<br\s*\/?>/gi,"")
+                        .replace(/\s+/g,"")
+                        .trim() === "";
+
+                const ehMedico =
+                    t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                    t.includes("CRM 30235");
+
+                const ehLinha =
+                    no.getAttribute("data-celk-linha-assinatura") === "1";
+
+                if(vazio && !ehMedico && !ehLinha){
+                    no.remove();
+                    aplicado = true;
                 }
 
             });
         }
 
-        // --------------------------------------------------
-        // ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA.
-        // Aplica COM CID e SEM CID.
-        // --------------------------------------------------
+        // ==================================================
+        // ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA
+        // ==================================================
 
         const blocosMedico = [
             ...el.querySelectorAll("p, div, li, td")
@@ -2566,12 +3462,13 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
         if(blocoMedico){
 
-            // Evita duplicar o espaço se o CELK reconstruir o editor.
             const anterior = blocoMedico.previousElementSibling;
 
             if(!(
                 anterior &&
-                anterior.getAttribute("data-celk-espaco-assinatura") === "1"
+                anterior.getAttribute(
+                    "data-celk-espaco-assinatura"
+                ) === "1"
             )){
 
                 const espaco = document.createElement("p");
@@ -2593,12 +3490,11 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
                 aplicado = true;
             }
-
         }
 
-        // --------------------------------------------------
-        // SINCRONIZA COM TINYMCE / WICKET
-        // --------------------------------------------------
+        // ==================================================
+        // SINCRONIZA TINYMCE / WICKET
+        // ==================================================
 
         try{
 
@@ -2625,18 +3521,17 @@ function aplicarLayoutAssinaturaAtestado(comCid){
                             editor.setContent(body.innerHTML);
                             editor.fire("input");
                             editor.fire("change");
-
                         }
 
                     }catch(_){}
 
                 });
-
             }
 
         }catch(_){}
 
         try{
+
             el.dispatchEvent(
                 new Event("input",{bubbles:true})
             );
