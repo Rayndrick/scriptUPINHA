@@ -2023,14 +2023,7 @@ function definirConteudoEditorDeclaracao(elemento, html){
         return false;
     }
 }
-function obterMedicoLogado(){
 
-    const nome = document.querySelector(
-        'label[wicketpath="linkMinhaConta_usuarioLogado"]'
-    )?.textContent?.trim();
-
-    return nome || "MÉDICO NÃO IDENTIFICADO";
-}
 function montarDeclaracaoPaciente(dados){
 
     return `
@@ -2063,30 +2056,73 @@ function montarDeclaracaoPaciente(dados){
         </p>
 
         <p style="margin:0;">
-${obterMedicoLogado()}        </p>
+            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
+        </p>
     `;
 }
 function obterNomeMae(){
 
-    const texto = document.body.innerText || "";
+    const elementos = [
+        ...document.querySelectorAll(
+            "input, textarea, select, label, span, div, td"
+        )
+    ];
 
-    const match = texto.match(
+    for(const el of elementos){
+
+        const texto = (
+            el.innerText ||
+            el.textContent ||
+            el.getAttribute("title") ||
+            el.getAttribute("aria-label") ||
+            el.getAttribute("placeholder") ||
+            ""
+        )
+        .replace(/\s+/g," ")
+        .trim();
+
+        if(!texto) continue;
+
+        // Procura textos como:
+        // MÃE: NOME DA MÃE
+        // MÃE - NOME DA MÃE
+        // MÃE NOME DA MÃE
+        const match = texto.match(
+            /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
+        );
+
+        if(match){
+
+            const nome = match[1]
+                .replace(/\s+/g," ")
+                .trim();
+
+            if(
+                nome &&
+                nome.length > 3 &&
+                !/^(REFERE|RELATA|NEGA|INFORMA|ACOMPANHA)$/i.test(nome)
+            ){
+                return nome.toUpperCase();
+            }
+        }
+    }
+
+    // Procura no texto geral da página
+    const tela = document.body.innerText || "";
+
+    const matchTela = tela.match(
         /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
     );
 
-    if(match){
-
-        return match[1]
+    if(matchTela){
+        return matchTela[1]
             .replace(/\s+/g," ")
             .trim()
             .toUpperCase();
-
     }
 
     return "NÃO IDENTIFICADO";
 }
-
-
 function montarDeclaracaoAcompanhante(dados){
 
     return `
@@ -2132,11 +2168,10 @@ function montarDeclaracaoAcompanhante(dados){
         </p>
 
         <p style="margin:0;">
-            ${obterMedicoLogado()}
+            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
         </p>
     `;
 }
-
 
 async function prepararDeclaracao(acompanhante){
 
@@ -2243,6 +2278,7 @@ async function prepararDeclaracao(acompanhante){
         });
 
         if(!opcao){
+
             throw new Error(
                 acompanhante
                     ? "Não encontrei DECLARAÇÃO DE COMPARECIMENTO (ACOMPANHANTE)."
@@ -2312,6 +2348,7 @@ async function prepararDeclaracao(acompanhante){
             }
         }
 
+        // Espera o editor do documento ficar disponível.
         await new Promise(r =>
             setTimeout(r,500)
         );
@@ -2320,6 +2357,7 @@ async function prepararDeclaracao(acompanhante){
             await esperarEditorDeclaracao(12000);
 
         if(!alvos.length){
+
             throw new Error(
                 "O editor da Declaração não foi encontrado."
             );
@@ -2375,6 +2413,8 @@ async function prepararDeclaracao(acompanhante){
 
     }
 }
+
+function abrirMenuDeclaracao(){
 
     if(document.getElementById("celk-declaracao-overlay")){
         return;
