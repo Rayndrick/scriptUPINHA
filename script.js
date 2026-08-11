@@ -847,21 +847,84 @@ function preencherEvolucao(opcoes = {}){
     }
 
     // ------------------------------
-    // QUEIXA
+    // TRIAGEM / QUEIXA
     // ------------------------------
-    let queixa = document.querySelector(
-        'textarea[data-bind*="DscAcolhimento"]'
-    )?.value?.trim() || "";
+    // Ao clicar em QUALQUER atendimento (Atendimento, ⭐ Clin ou ⭐ Ped),
+    // primeiro tenta recuperar exatamente o que foi registrado na TRIAGEM.
+    //
+    // Quando o CELK disponibiliza o histórico de evoluções, usamos
+    // evolucoesTriagem() e pegamos a triagemRaw. Caso não esteja disponível,
+    // usamos o campo DscAcolhimento como fallback.
+    function obterTextoTriagem(){
 
-    if(!queixa){
-        queixa = "PACIENTE COM QUADRO DE";
+        let bruto = "";
+
+        // 1) Fonte principal: histórico de triagem do CELK, quando
+        // disponibilizado pelo próprio sistema/helper.
+        try{
+            const infoTriagem = window.o4a?.util?.evolucoesTriagem?.();
+
+            if(infoTriagem?.triagemRaw){
+                bruto = String(infoTriagem.triagemRaw).trim();
+            }
+        }catch(e){}
+
+        // 2) Fallback: campo de acolhimento/triagem da página.
+        if(!bruto){
+            const campoAcolhimento = document.querySelector(
+                'textarea[data-bind*="DscAcolhimento"]'
+            );
+
+            bruto = campoAcolhimento?.value?.trim() || "";
+        }
+
+        // 3) Outro campo encontrado em algumas telas pediátricas.
+        if(!bruto){
+            const campoTriagem = document.querySelector(
+                'textarea[data-bind*="DescricaoQueixaFisico"]'
+            );
+
+            bruto = campoTriagem?.value?.trim() || "";
+        }
+
+        if(!bruto){
+            return "";
+        }
+
+        // Se o CELK/helper já possuir o parser oficial de triagem,
+        // usa o parser para retirar SSVV/metadados da evolução.
+        try{
+            if(typeof window.o4a?.util?.triagem?.parse === "function"){
+                const parsed = window.o4a.util.triagem.parse(bruto);
+                if(parsed?.body?.trim()){
+                    bruto = parsed.body.trim();
+                }
+            }
+        }catch(e){}
+
+        // Limpeza de marcadores que não pertencem à queixa.
+        bruto = bruto
+            .replace(/\\r/g, "")
+            .replace(/^\\s*#+\\s*/gm, "")
+            .trim();
+
+        // Fallback adicional: se ainda vierem blocos de CMB,
+        // alergias, SSVV ou exame físico junto, conserva somente
+        // o que foi escrito antes desses blocos.
+        const corte = bruto.search(
+            /(?:^|\\n)\\s*#?\\s*(?:CMB|ALERGIAS?|SSVV|SINAIS\\s+VITAIS|EXAME\\s+F[IÍ]SICO|CONDUTA|CD)\\s*:/im
+        );
+
+        if(corte > 0){
+            bruto = bruto.slice(0, corte).trim();
+        }
+
+        return bruto.toUpperCase();
     }
 
-    queixa = queixa
-        .replace(/^#+\s*/gm, "")
-        .replace(/\r/g, "")
-        .trim()
-        .toUpperCase();
+    const queixaTriagem = obterTextoTriagem();
+
+    const queixa = queixaTriagem || "PACIENTE COM QUADRO DE";
 
     // ------------------------------
     // ALERGIAS
@@ -958,7 +1021,7 @@ function preencherEvolucao(opcoes = {}){
 
         texto = `${cabecalhoUnidade}
 
-# PACIENTE COM QUADRO DE
+# PACIENTE COM QUADRO DE ${queixa}
 
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
@@ -978,7 +1041,7 @@ ${exameAtendimento}
 
         texto = `${cabecalhoUnidade}
 
-# PACIENTE COM QUADRO DE
+# PACIENTE COM QUADRO DE ${queixa}
 
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
@@ -999,7 +1062,7 @@ ${examePed}
 
         texto = `${cabecalhoUnidade}
 
-# PACIENTE COM QUADRO DE
+# PACIENTE COM QUADRO DE ${queixa}
 
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
