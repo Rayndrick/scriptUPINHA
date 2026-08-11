@@ -858,27 +858,121 @@ function preencherEvolucao(opcoes = {}){
     // ------------------------------
     // TRIAGEM / QUEIXA
     // ------------------------------
-    // Ao clicar em QUALQUER atendimento (Atendimento, ⭐ Clin ou ⭐ Ped),
-    // primeiro tenta recuperar exatamente o que foi registrado na TRIAGEM.
+    // O CELK mantém a triagem no histórico de atendimentos.
+    // Na tela, o bloco aparece como:
+    // "UP1 - TRIAGEM COM CLASSIFICAÇÃO DE RISCO"
+    // e logo abaixo existe um <p> com a descrição escrita na triagem.
     //
-    // Quando o CELK disponibiliza o histórico de evoluções, usamos
-    // evolucoesTriagem() e pegamos a triagemRaw. Caso não esteja disponível,
-    // usamos o campo DscAcolhimento como fallback.
+    // Exemplo real:
+    // <p>MAE REFERE, TOSSE SECA HÁ 6 DIAS NEGA FEBRE...</p>
+    //
+    // A partir desta versão, essa é a FONTE PRINCIPAL da queixa.
     function obterTextoTriagem(){
 
         let bruto = "";
 
-        // 1) Fonte principal: histórico de triagem do CELK, quando
-        // disponibilizado pelo próprio sistema/helper.
+        // 1) FONTE PRINCIPAL: histórico visual da TRIAGEM.
+        // Procura os blocos de descrição do repeater de atendimentos
+        // e identifica aquele cujo cartão/ancestral contém
+        // "TRIAGEM COM CLASSIFICAÇÃO DE RISCO".
         try{
-            const infoTriagem = window.o4a?.util?.evolucoesTriagem?.();
 
-            if(infoTriagem?.triagemRaw){
-                bruto = String(infoTriagem.triagemRaw).trim();
+            const descricoes = Array.from(
+                document.querySelectorAll(
+                    'div[wicketpath*="repeaterAtendimentosProntuario"][wicketpath*="_descricao"] p, ' +
+                    'div[wicketpath*="repeaterAtendimentosProntuario"][wicketpath*="_descricao"]'
+                )
+            );
+
+            for(const el of descricoes){
+
+                const textoDescricao = (el.textContent || "")
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                if(!textoDescricao){
+                    continue;
+                }
+
+                let ancestral = el;
+
+                for(let i = 0; i < 8 && ancestral; i++){
+                    const textoCard = (ancestral.innerText || "")
+                        .replace(/\s+/g, " ")
+                        .trim()
+                        .toUpperCase();
+
+                    if(
+                        textoCard.includes("TRIAGEM COM CLASSIFICAÇÃO DE RISCO") ||
+                        textoCard.includes("TRIAGEM COM CLASSIFICACAO DE RISCO")
+                    ){
+                        bruto = textoDescricao;
+                        break;
+                    }
+
+                    ancestral = ancestral.parentElement;
+                }
+
+                if(bruto){
+                    break;
+                }
             }
-        }catch(e){}
 
-        // 2) Fallback: campo de acolhimento/triagem da página.
+        }catch(e){
+            console.warn(
+                "[CELK Helper] erro ao localizar triagem no histórico:",
+                e
+            );
+        }
+
+        // 2) Segunda tentativa: localizar diretamente qualquer bloco
+        // que contenha o título da triagem e pegar o <p> de descrição.
+        if(!bruto){
+            try{
+
+                const candidatos = Array.from(
+                    document.querySelectorAll(
+                        '[wicketpath*="repeaterAtendimentosProntuario"]'
+                    )
+                );
+
+                for(const bloco of candidatos){
+
+                    const textoBloco = (bloco.innerText || "")
+                        .replace(/\s+/g, " ")
+                        .trim()
+                        .toUpperCase();
+
+                    if(
+                        textoBloco.includes("TRIAGEM COM CLASSIFICAÇÃO DE RISCO") ||
+                        textoBloco.includes("TRIAGEM COM CLASSIFICACAO DE RISCO")
+                    ){
+
+                        const p = bloco.querySelector("p");
+
+                        if(p?.textContent?.trim()){
+                            bruto = p.textContent.trim();
+                            break;
+                        }
+                    }
+                }
+
+            }catch(e){}
+        }
+
+        // 3) Mantém compatibilidade com outras telas do CELK.
+        if(!bruto){
+            try{
+                const infoTriagem =
+                    window.o4a?.util?.evolucoesTriagem?.();
+
+                if(infoTriagem?.triagemRaw){
+                    bruto = String(infoTriagem.triagemRaw).trim();
+                }
+            }catch(e){}
+        }
+
+        // 4) Campo de acolhimento, quando existir.
         if(!bruto){
             const campoAcolhimento = document.querySelector(
                 'textarea[data-bind*="DscAcolhimento"]'
@@ -887,7 +981,7 @@ function preencherEvolucao(opcoes = {}){
             bruto = campoAcolhimento?.value?.trim() || "";
         }
 
-        // 3) Outro campo encontrado em algumas telas pediátricas.
+        // 5) Campo usado em algumas telas pediátricas.
         if(!bruto){
             const campoTriagem = document.querySelector(
                 'textarea[data-bind*="DescricaoQueixaFisico"]'
@@ -900,28 +994,21 @@ function preencherEvolucao(opcoes = {}){
             return "";
         }
 
-        // Se o CELK/helper já possuir o parser oficial de triagem,
-        // usa o parser para retirar SSVV/metadados da evolução.
-        try{
-            if(typeof window.o4a?.util?.triagem?.parse === "function"){
-                const parsed = window.o4a.util.triagem.parse(bruto);
-                if(parsed?.body?.trim()){
-                    bruto = parsed.body.trim();
-                }
-            }
-        }catch(e){}
-
-        // Limpeza de marcadores que não pertencem à queixa.
+        // Limpeza sem destruir a frase da triagem.
         bruto = bruto
-            .replace(/\\r/g, "")
-            .replace(/^\\s*#+\\s*/gm, "")
+            .replace(/\r/g, "")
+            .replace(/\s+/g, " ")
             .trim();
 
-        // Fallback adicional: se ainda vierem blocos de CMB,
-        // alergias, SSVV ou exame físico junto, conserva somente
-        // o que foi escrito antes desses blocos.
+        // Remove somente marcadores indevidos no início.
+        bruto = bruto
+            .replace(/^#+\s*/i, "")
+            .trim();
+
+        // Se por alguma razão o texto vier acompanhado de blocos
+        // de parâmetros, corta antes deles.
         const corte = bruto.search(
-            /(?:^|\\n)\\s*#?\\s*(?:CMB|ALERGIAS?|SSVV|SINAIS\\s+VITAIS|EXAME\\s+F[IÍ]SICO|CONDUTA|CD)\\s*:/im
+            /(?:#?\s*)(?:CMB|ALERGIAS?|SSVV|SINAIS\s+VITAIS|EXAME\s+F[IÍ]SICO|CONDUTA|CD)\s*:/i
         );
 
         if(corte > 0){
