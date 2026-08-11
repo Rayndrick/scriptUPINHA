@@ -24,11 +24,13 @@ if (window.celk.running) {
 }
 
 window.celk.running = true;
-    const CONFIG = {
+    // Sempre que o script carregar, o intervalo começa em 0 segundos.
+// Isso evita recuperar automaticamente o último valor salvo.
+localStorage.setItem("celk_refresh", "0");
 
-    refreshSeconds: Number(
-        localStorage.getItem("celk_refresh") || 5
-    )
+const CONFIG = {
+
+    refreshSeconds: 0
 
 };
 
