@@ -1812,79 +1812,155 @@ async function prepararAtestado(dias, comCid){
 
     try{
 
-        // Se já estiver na tela de atestado, apenas configura.
-        let campoDias = document.querySelector(
-            "#AtestadoMedico_NumeroDias.form-input"
+        console.log(
+            "[CELK Helper] Iniciando Atestado:",
+            dias,
+            comCid ? "COM CID" : "SEM CID"
         );
+
+        // --------------------------------------------------
+        // 1. Se a tela oficial do atestado já estiver aberta,
+        //    usa os campos existentes.
+        // --------------------------------------------------
+
+        let campoDias = localizarCampoDiasAtestado();
 
         if(!campoDias){
 
-            // Primeiro tenta exatamente a estratégia usada pelo
-            // script modelo antigo: localizar a conduta "Atestado Médico"
-            // no Knockout e carregar a tela oficial do CELK.
+            // --------------------------------------------------
+            // 2. Primeiro tenta a conduta oficial do CELK,
+            //    como no script modelo.
+            // --------------------------------------------------
+
             try{
 
-                const elementoConduta =
-                    document.querySelector('span[data-bind*="DscConduta"]');
+                const elementosConduta = [
+                    ...document.querySelectorAll(
+                        'span[data-bind*="DscConduta"], ' +
+                        '[data-bind*="DscConduta"]'
+                    )
+                ];
+
+                const elementoConduta = elementosConduta.find(el =>
+                    (el.textContent || "")
+                        .trim()
+                        .toUpperCase()
+                        .includes("ATESTADO MÉDICO")
+                    ||
+                    (el.textContent || "")
+                        .trim()
+                        .toUpperCase()
+                        .includes("ATESTADO MEDICO")
+                );
 
                 if(elementoConduta && window.ko?.contextFor){
 
-                    const root = window.ko.contextFor(elementoConduta)?.$root;
+                    const contexto =
+                        window.ko.contextFor(elementoConduta);
 
-                    const conduta = root?.Condutas?.()
-                        ?.flatMap(x => x.ListaCondutas?.() || [])
-                        ?.find(x =>
-                            String(x.DscConduta?.() || "")
-                                .trim()
-                                .toUpperCase() === "ATESTADO MÉDICO"
+                    const root = contexto?.$root;
+
+                    const condutas =
+                        typeof root?.Condutas === "function"
+                            ? root.Condutas()
+                            : [];
+
+                    let condutaEncontrada = null;
+
+                    for(const grupo of (condutas || [])){
+
+                        const lista =
+                            typeof grupo?.ListaCondutas === "function"
+                                ? grupo.ListaCondutas()
+                                : (grupo?.ListaCondutas || []);
+
+                        for(const c of (lista || [])){
+
+                            const nome = String(
+                                typeof c?.DscConduta === "function"
+                                    ? c.DscConduta()
+                                    : c?.DscConduta || ""
+                            )
+                            .trim()
+                            .toUpperCase();
+
+                            if(
+                                nome === "ATESTADO MÉDICO" ||
+                                nome === "ATESTADO MEDICO"
+                            ){
+                                condutaEncontrada = c;
+                                break;
+                            }
+                        }
+
+                        if(condutaEncontrada) break;
+                    }
+
+                    if(
+                        condutaEncontrada &&
+                        typeof root?.CarregaCondutas === "function"
+                    ){
+
+                        const destino =
+                            typeof condutaEncontrada.CodAcaoDestino === "function"
+                                ? condutaEncontrada.CodAcaoDestino()
+                                : condutaEncontrada.CodAcaoDestino;
+
+                        console.log(
+                            "[CELK Helper] Abrindo conduta Atestado Médico:",
+                            destino
                         );
 
-                    if(conduta && typeof root.CarregaCondutas === "function"){
-
-                        root.CarregaCondutas(
-                            conduta.CodAcaoDestino()
-                        );
-
+                        root.CarregaCondutas(destino);
                     }
                 }
 
             }catch(e){
+
                 console.warn(
-                    "[CELK Helper] não foi possível abrir pela conduta:",
+                    "[CELK Helper] falha ao abrir conduta Atestado:",
                     e
                 );
             }
 
-            // Aguarda a tela oficial.
-            campoDias = await celkEsperarElemento(
-                "#AtestadoMedico_NumeroDias.form-input",
-                10000
-            );
+            campoDias = await esperarCampoDiasAtestado(6000);
         }
 
-        // Fallback: usa "Novo Documento" e escolhe o modelo
-        // diretamente no modal mostrado pelo CELK.
+        // --------------------------------------------------
+        // 3. Se não abriu pela conduta, usa o fluxo DOCUMENTOS
+        //    que você mostrou no print.
+        // --------------------------------------------------
+
         if(!campoDias){
 
             const novoDocumento = [...document.querySelectorAll(
-                "button, a, input[type='button'], input[type='submit']"
+                "button, a, input[type='button'], input[type='submit'], " +
+                "div, span"
             )].find(el => {
 
-                const txt = (
+                const texto = (
                     el.innerText ||
                     el.value ||
                     el.getAttribute("title") ||
                     ""
-                ).trim().toUpperCase();
+                )
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
 
-                return txt === "NOVO DOCUMENTO" ||
-                       txt === "NOVO DOCUMENTO";
+                return texto === "NOVO DOCUMENTO";
             });
 
             if(novoDocumento){
+
+                console.log(
+                    "[CELK Helper] Abrindo Novo Documento."
+                );
+
                 novoDocumento.click();
+
             }else{
-                // TinyMCE também possui o botão "Novo documento".
+
                 const tinyNovo = document.querySelector(
                     'a.mce_newdocument[title="Novo documento"]'
                 );
@@ -1894,126 +1970,237 @@ async function prepararAtestado(dias, comCid){
                 }
             }
 
-            const tipo = await celkEsperarElemento(
-                "select",
-                8000,
-                function(el){
+            // Espera o modal de modelo.
+            const tipo = await esperarSelectModeloAtestado(8000);
 
-                    const opcoes = [...el.options]
-                        .map(o => (o.textContent || "").trim().toUpperCase());
+            if(!tipo){
 
-                    return opcoes.some(t =>
-                        t.includes("ATESTADO MEDICO") ||
-                        t.includes("ATESTADO MÉDICO")
-                    );
-                }
-            );
-
-            if(tipo){
-
-                const alvo = comCid
-                    ? ["ATESTADO MEDICO COM CID (IDEAS)", "ATESTADO MÉDICO COM CID (IDEAS)"]
-                    : ["ATESTADO MEDICO (IDEAS)", "ATESTADO MÉDICO (IDEAS)"];
-
-                const opcao = [...tipo.options].find(o => {
-
-                    const txt = (o.textContent || "")
-                        .replace(/\s+/g, " ")
-                        .trim()
-                        .toUpperCase();
-
-                    return alvo.includes(txt) ||
-                           txt === (comCid
-                               ? "ATESTADO MEDICO COM CID (IDEAS)"
-                               : "ATESTADO MEDICO (IDEAS)");
-                });
-
-                if(opcao){
-
-                    tipo.value = opcao.value;
-
-                    tipo.dispatchEvent(new Event("input", {
-                        bubbles:true
-                    }));
-
-                    tipo.dispatchEvent(new Event("change", {
-                        bubbles:true
-                    }));
-
-                    tipo.dispatchEvent(new Event("blur", {
-                        bubbles:true
-                    }));
-                }
+                throw new Error(
+                    "O CELK não abriu o seletor de Modelo de Documento."
+                );
             }
 
-            campoDias = await celkEsperarElemento(
-                "#AtestadoMedico_NumeroDias.form-input",
-                10000
+            const alvo = comCid
+                ? [
+                    "ATESTADO MEDICO COM CID (IDEAS)",
+                    "ATESTADO MÉDICO COM CID (IDEAS)"
+                ]
+                : [
+                    "ATESTADO MEDICO (IDEAS)",
+                    "ATESTADO MÉDICO (IDEAS)"
+                ];
+
+            const opcao = [...tipo.options].find(o => {
+
+                const txt = (o.textContent || "")
+                    .replace(/\s+/g," ")
+                    .trim()
+                    .toUpperCase();
+
+                return alvo.includes(txt) ||
+                    (
+                        comCid &&
+                        txt.includes("ATESTADO MEDICO") &&
+                        txt.includes("COM CID")
+                    ) ||
+                    (
+                        !comCid &&
+                        txt === "ATESTADO MEDICO (IDEAS)"
+                    );
+            });
+
+            if(!opcao){
+
+                throw new Error(
+                    "Modelo de Atestado Médico não encontrado no CELK."
+                );
+            }
+
+            console.log(
+                "[CELK Helper] Modelo selecionado:",
+                opcao.textContent
             );
-        }
 
-        if(!campoDias){
+            tipo.value = opcao.value;
 
-            alert(
-                "Não consegui abrir o formulário de Atestado Médico."
-            );
+            // Eventos nativos.
+            ["input","change"].forEach(tipoEvento => {
 
-            return;
-        }
-
-        // Número de dias.
-        campoDias.value = String(dias);
-
-        campoDias.dispatchEvent(new Event("input", {
-            bubbles:true
-        }));
-
-        campoDias.dispatchEvent(new Event("change", {
-            bubbles:true
-        }));
-
-        campoDias.dispatchEvent(new Event("blur", {
-            bubbles:true
-        }));
-
-        // CID.
-        const checkCid = document.querySelector(
-            "#AtestadoMedico_ImpressaoCodCid"
-        );
-
-        if(checkCid){
-
-            checkCid.checked = !!comCid;
-
-            ["click","input","change","blur"].forEach(tipo => {
-
-                checkCid.dispatchEvent(
-                    new Event(tipo, {
+                tipo.dispatchEvent(
+                    new Event(tipoEvento,{
                         bubbles:true,
                         cancelable:true
                     })
                 );
 
             });
+
+            // --------------------------------------------------
+            // IMPORTANTE:
+            // O modal de "MODELO DE DOCUMENTO" pode exigir que
+            // o usuário confirme a escolha. Localizamos o botão
+            // DENTRO DO MESMO MODAL, não na página inteira.
+            // --------------------------------------------------
+
+            const modal = encontrarModalDoSelect(tipo);
+
+            if(modal){
+
+                const botoes = [
+                    ...modal.querySelectorAll(
+                        "button, input[type='button'], " +
+                        "input[type='submit'], a"
+                    )
+                ];
+
+                const confirmar = botoes.find(btn => {
+
+                    const txt = (
+                        btn.innerText ||
+                        btn.value ||
+                        btn.getAttribute("title") ||
+                        ""
+                    )
+                    .replace(/\s+/g," ")
+                    .trim()
+                    .toUpperCase();
+
+                    return [
+                        "OK",
+                        "CONFIRMAR",
+                        "CONTINUAR",
+                        "SELECIONAR",
+                        "CRIAR",
+                        "ABRIR",
+                        "PROSSEGUIR"
+                    ].includes(txt);
+                });
+
+                if(confirmar){
+
+                    console.log(
+                        "[CELK Helper] Confirmando modelo de documento:",
+                        confirmar.innerText || confirmar.value
+                    );
+
+                    confirmar.click();
+
+                }else{
+
+                    // Alguns modelos Wicket usam botão de imagem.
+                    const imgBotao = botoes.find(btn => {
+
+                        const title = (
+                            btn.getAttribute("title") || ""
+                        ).toUpperCase();
+
+                        const alt = (
+                            btn.getAttribute("alt") || ""
+                        ).toUpperCase();
+
+                        return (
+                            title.includes("OK") ||
+                            title.includes("CONFIRM") ||
+                            alt.includes("OK") ||
+                            alt.includes("CONFIRM")
+                        );
+                    });
+
+                    if(imgBotao){
+                        imgBotao.click();
+                    }
+                }
+            }
+
+            // Dá tempo para o CELK/Wicket montar o formulário.
+            await aguardarMudancaDaTela(12000);
+
+            campoDias = await esperarCampoDiasAtestado(5000);
         }
 
-        // Se COM CID, deixa o campo disponível e vazio para
-        // o médico digitar o CID.
+        // --------------------------------------------------
+        // 4. Última tentativa: localizar campos pelo texto/label,
+        //    sem depender de ID fixo.
+        // --------------------------------------------------
+
+        if(!campoDias){
+            campoDias = localizarCampoDiasAtestado();
+        }
+
+        if(!campoDias){
+
+            console.error(
+                "[CELK Helper] DOM após abertura do documento:",
+                document.body.innerText?.slice(-5000)
+            );
+
+            alert(
+                "O CELK abriu o fluxo do documento, mas o campo " +
+                "\"dias de afastamento\" não foi localizado. " +
+                "Se aparecer o modelo do atestado, me mande um print dessa tela."
+            );
+
+            return;
+        }
+
+        // --------------------------------------------------
+        // 5. Preenche dias.
+        // --------------------------------------------------
+
+        campoDias.value = String(dias);
+
+        ["input","change","blur"].forEach(tipoEvento => {
+            campoDias.dispatchEvent(
+                new Event(tipoEvento,{
+                    bubbles:true,
+                    cancelable:true
+                })
+            );
+        });
+
+        // --------------------------------------------------
+        // 6. CID.
+        // --------------------------------------------------
+
+        const checkCid = localizarCheckboxCidAtestado();
+
+        if(checkCid){
+
+            if(checkCid.checked !== !!comCid){
+
+                checkCid.click();
+
+            }
+
+            checkCid.checked = !!comCid;
+
+            checkCid.dispatchEvent(
+                new Event("input",{bubbles:true})
+            );
+
+            checkCid.dispatchEvent(
+                new Event("change",{bubbles:true})
+            );
+        }
+
+        const campoCid =
+            document.querySelector("#AtestadoMedico_DscCid") ||
+            localizarCampoPorLabel(/CID/i);
+
+        const campoNumCid =
+            document.querySelector("#AtestadoMedico_NumCid");
+
         if(comCid){
 
-            const campoCid = document.querySelector(
-                "#AtestadoMedico_DscCid"
-            );
-
-            const campoNumCid = document.querySelector(
-                "#AtestadoMedico_NumCid"
-            );
-
+            // Não preenche automaticamente o CID.
+            // Deixa o espaço para o médico digitar.
             if(campoCid){
                 campoCid.value = "";
+
                 campoCid.dispatchEvent(
                     new Event("input",{bubbles:true})
                 );
+
                 campoCid.dispatchEvent(
                     new Event("change",{bubbles:true})
                 );
@@ -2021,9 +2208,11 @@ async function prepararAtestado(dias, comCid){
 
             if(campoNumCid){
                 campoNumCid.value = "";
+
                 campoNumCid.dispatchEvent(
                     new Event("input",{bubbles:true})
                 );
+
                 campoNumCid.dispatchEvent(
                     new Event("change",{bubbles:true})
                 );
@@ -2032,26 +2221,20 @@ async function prepararAtestado(dias, comCid){
             setTimeout(() => {
                 (
                     document.querySelector("#AtestadoMedico_DscCid") ||
-                    document.querySelector("#AtestadoMedico_NumCid")
+                    document.querySelector("#AtestadoMedico_NumCid") ||
+                    campoCid
                 )?.focus();
-            }, 100);
+            },200);
 
         }else{
 
-            // SEM CID: limpa e desmarca.
-            const campoCid = document.querySelector(
-                "#AtestadoMedico_DscCid"
-            );
-
-            const campoNumCid = document.querySelector(
-                "#AtestadoMedico_NumCid"
-            );
-
             if(campoCid){
                 campoCid.value = "";
+
                 campoCid.dispatchEvent(
                     new Event("input",{bubbles:true})
                 );
+
                 campoCid.dispatchEvent(
                     new Event("change",{bubbles:true})
                 );
@@ -2059,9 +2242,11 @@ async function prepararAtestado(dias, comCid){
 
             if(campoNumCid){
                 campoNumCid.value = "";
+
                 campoNumCid.dispatchEvent(
                     new Event("input",{bubbles:true})
                 );
+
                 campoNumCid.dispatchEvent(
                     new Event("change",{bubbles:true})
                 );
@@ -2071,19 +2256,8 @@ async function prepararAtestado(dias, comCid){
         console.log(
             "[CELK Helper] Atestado preparado:",
             dias,
-            "dia(s)",
             comCid ? "COM CID" : "SEM CID"
         );
-
-        /*
-         * ASSINATURA:
-         * Não dispara Salvar/Assinar automaticamente.
-         * O documento fica preparado para a assinatura normal
-         * do profissional logado no CELK.
-         *
-         * A identificação profissional permanece a do usuário
-         * logado (RAYNDRICK KELRYN ASSIS LIMA / CRM 30235).
-         */
 
     }catch(e){
 
@@ -2093,10 +2267,262 @@ async function prepararAtestado(dias, comCid){
         );
 
         alert(
-            "Erro ao preparar o Atestado Médico. " +
-            "Veja o Console para detalhes."
+            "Erro ao abrir o Atestado Médico: " +
+            (e?.message || e)
         );
     }
+}
+
+
+//--------------------------------------------------
+// LOCALIZADORES DO ATESTADO
+//--------------------------------------------------
+
+function localizarCampoDiasAtestado(){
+
+    // ID conhecido do modelo antigo.
+    const direto = document.querySelector(
+        "#AtestadoMedico_NumeroDias.form-input, " +
+        "#AtestadoMedico_NumeroDias"
+    );
+
+    if(direto){
+        return direto;
+    }
+
+    // Fallback: inputs numéricos cujo nome/id/placeholder
+    // indique dias de afastamento.
+    const inputs = [
+        ...document.querySelectorAll(
+            "input, textarea"
+        )
+    ];
+
+    return inputs.find(el => {
+
+        const atributos = [
+            el.id,
+            el.name,
+            el.placeholder,
+            el.getAttribute("data-bind"),
+            el.getAttribute("aria-label")
+        ]
+        .filter(Boolean)
+        .join(" ")
+        .toUpperCase();
+
+        return (
+            atributos.includes("NUMERODIAS") ||
+            atributos.includes("NUMERO_DIAS") ||
+            atributos.includes("DIAS") &&
+            (
+                atributos.includes("ATEST") ||
+                atributos.includes("AFAST")
+            )
+        );
+
+    }) || null;
+}
+
+
+function localizarCheckboxCidAtestado(){
+
+    return (
+        document.querySelector(
+            "#AtestadoMedico_ImpressaoCodCid"
+        ) ||
+        [...document.querySelectorAll(
+            'input[type="checkbox"]'
+        )].find(el => {
+
+            const attrs = [
+                el.id,
+                el.name,
+                el.getAttribute("data-bind"),
+                el.getAttribute("aria-label")
+            ]
+            .filter(Boolean)
+            .join(" ")
+            .toUpperCase();
+
+            return (
+                attrs.includes("IMPRESSAOCODCID") ||
+                attrs.includes("CODCID") ||
+                attrs.includes("CID")
+            );
+        }) ||
+        null
+    );
+}
+
+
+function localizarCampoPorLabel(regex){
+
+    const labels = [...document.querySelectorAll("label")];
+
+    for(const label of labels){
+
+        if(!regex.test(label.textContent || "")){
+            continue;
+        }
+
+        const forId = label.htmlFor;
+
+        if(forId){
+
+            const el = document.getElementById(forId);
+
+            if(el){
+                return el;
+            }
+        }
+
+        const parent = label.parentElement;
+
+        const campo = parent?.querySelector(
+            "input,textarea,select"
+        );
+
+        if(campo){
+            return campo;
+        }
+    }
+
+    return null;
+}
+
+
+function encontrarModalDoSelect(select){
+
+    let el = select;
+
+    for(let i=0;i<8 && el;i++){
+
+        const cls = (
+            el.className || ""
+        ).toString().toLowerCase();
+
+        const role = (
+            el.getAttribute("role") || ""
+        ).toLowerCase();
+
+        if(
+            role === "dialog" ||
+            cls.includes("modal") ||
+            cls.includes("dialog") ||
+            cls.includes("window")
+        ){
+            return el;
+        }
+
+        el = el.parentElement;
+    }
+
+    return select.parentElement?.parentElement || null;
+}
+
+
+function esperarSelectModeloAtestado(timeout=8000){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+
+        const procurar = () => {
+
+            const selects = [
+                ...document.querySelectorAll("select")
+            ];
+
+            const encontrado = selects.find(el => {
+
+                const textoOpcoes = [...el.options]
+                    .map(o => (o.textContent || "").trim().toUpperCase())
+                    .join(" | ");
+
+                return (
+                    textoOpcoes.includes("ATESTADO MEDICO") ||
+                    textoOpcoes.includes("ATESTADO MÉDICO")
+                );
+            });
+
+            if(encontrado){
+                resolve(encontrado);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve(null);
+                return;
+            }
+
+            setTimeout(procurar,150);
+        };
+
+        procurar();
+    });
+}
+
+
+function esperarCampoDiasAtestado(timeout=8000){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+
+        const procurar = () => {
+
+            const campo = localizarCampoDiasAtestado();
+
+            if(campo){
+                resolve(campo);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve(null);
+                return;
+            }
+
+            setTimeout(procurar,150);
+        };
+
+        procurar();
+    });
+}
+
+
+function aguardarMudancaDaTela(timeout=12000){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+        const inicial = document.body.innerText?.length || 0;
+
+        const verificar = () => {
+
+            const atual = document.body.innerText?.length || 0;
+
+            if(
+                document.querySelector(
+                    "#AtestadoMedico_NumeroDias"
+                ) ||
+                Math.abs(atual - inicial) > 100
+            ){
+                resolve(true);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve(false);
+                return;
+            }
+
+            setTimeout(verificar,200);
+        };
+
+        verificar();
+    });
 }
 
 
