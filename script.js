@@ -402,7 +402,16 @@ cid.onmouseout=function(){
     cid.style.background="transparent";
 };
 
-cid.onclick=abrirMenuCID;
+cid.onclick=function(){
+
+    // Ao clicar em 📋 CID, já seleciona automaticamente
+    // "ALTA MÉDICA" no campo Encaminhamento do CELK.
+    selecionarAltaMedica();
+
+    // Mantém o menu de CIDs normalmente.
+    abrirMenuCID();
+
+};
 //--------------------------------------------------
 // BOTÃO NEWS
 //--------------------------------------------------
@@ -1293,6 +1302,82 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
     console.log("Paciente salvo:", nome);
 
 }
+function selecionarAltaMedica(){
+
+    // Campo "Encaminhamento" identificado no CELK:
+    // name="panelContainer:nodePanel:form:eloNaturezaTipoEncaminhamento"
+    const selects = [
+        ...document.querySelectorAll(
+            'select[name*="eloNaturezaTipoEncaminhamento"]'
+        )
+    ];
+
+    const select = selects.find(el => {
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+
+        return style.display !== "none" &&
+               style.visibility !== "hidden" &&
+               rect.width > 0 &&
+               rect.height > 0;
+    }) || selects[0];
+
+    if(!select){
+        console.log(
+            "CELK Helper: campo Encaminhamento não encontrado."
+        );
+        return false;
+    }
+
+    const opcao = [...select.options].find(option => {
+
+        const texto = (option.textContent || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toUpperCase();
+
+        return texto === "ALTA MÉDICA" ||
+               texto === "ALTA MEDICA" ||
+               texto.includes("ALTA MÉDICA") ||
+               texto.includes("ALTA MEDICA");
+
+    });
+
+    if(!opcao){
+        console.log(
+            "CELK Helper: opção ALTA MÉDICA não encontrada."
+        );
+        return false;
+    }
+
+    // Define a opção selecionada.
+    select.value = opcao.value;
+
+    // Dispara os eventos que o CELK/Wicket pode estar escutando.
+    select.dispatchEvent(new Event("input", {
+        bubbles:true
+    }));
+
+    select.dispatchEvent(new Event("change", {
+        bubbles:true
+    }));
+
+    // Também dispara um evento de blur para componentes que
+    // atualizam o formulário ao perder o foco.
+    try{
+        select.dispatchEvent(new Event("blur", {
+            bubbles:true
+        }));
+    }catch(e){}
+
+    console.log(
+        "CELK Helper: Encaminhamento definido como ALTA MÉDICA."
+    );
+
+    return true;
+}
+
+
 function abrirMenuCID(){
 
     if(document.getElementById("celk-cid-menu")){
