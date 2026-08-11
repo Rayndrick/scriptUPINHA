@@ -760,7 +760,36 @@ function preencherEvolucao(opcoes = {}){
     // ------------------------------
     // DADOS DO PACIENTE
     // ------------------------------
-    const peso = obter(/Peso:\s*([\d.,]+)/i);
+    let peso = obter(/Peso\s*:?\s*([\d.,]+)\s*(?:kg)?/i);
+
+    // Peso pediátrico: tenta primeiro o campo de peso da página,
+    // depois o campo da prescrição e, por fim, o texto da triagem.
+    const pesoTriagem = parseFloat(
+        (
+            document.querySelector("textarea[data-bind*='DescricaoQueixaFisico']")?.value
+                ?.match(/(\d+(?:[.,]\d+)?)\s*kg/i)?.[1] || ""
+        ).replace(",", ".")
+    ) || 0;
+
+    const pesoCampo = parseFloat(
+        (
+            document.querySelector("input[data-bind*='VlrPeso']")?.value?.trim() || ""
+        ).replace(",", ".")
+    ) || 0;
+
+    const pesoPrescricao = parseFloat(
+        (
+            document.querySelector("#PrescricaoMedicamento_PesoUltimoAcolhimento")?.value?.trim() || ""
+        ).replace(",", ".")
+    ) || 0;
+
+    const pesoPagina = pesoCampo || pesoPrescricao || pesoTriagem;
+
+    if(pesoPagina > 0){
+        peso = pesoPagina.toFixed(1).replace(".", ",");
+    }else if(!peso || peso === "NT"){
+        peso = "NT";
+    }
     const fc = obter(/(?:F\.?C\.?|FC|Frequência Cardíaca)\s*:?\s*([\d.,]+)/i);
     const fr = obter(/(?:F\.?R\.?|FR|Frequência Respiratória|Freq\.?\s*Resp\.?)\s*:?\s*([\d.,]+)/i);
     const sat = obter(/(?:Sat\.?Ox\.?|Sat\.?|Saturação|SpO2|SpO₂)\s*:?\s*([\d.,]+)/i);
@@ -837,25 +866,38 @@ function preencherEvolucao(opcoes = {}){
     // ------------------------------
     // ALERGIAS
     // ------------------------------
+    // O CELK informa a alergia no link "Alergia".
+    // Exemplo real da página:
+    // <a wicketpath="form_linkAlergia" title="AMOXICILINA">...</a>
+    //
+    // Portanto, NÃO devemos interpretar o texto ao redor da tela.
+    // A fonte da verdade é o atributo TITLE desse link.
+    // Se o link/atributo não existir ou estiver vazio -> NEGA.
+
     let alergia = "NEGA";
 
-    const mAlergia = tela.match(
-        /(?:ALERGIA(?:S)?|ALÉRGIC[AO]\s+A)\s*:?\s*([^\n\r]+)/i
-    );
+    const alergiaEl =
+        document.querySelector('a[wicketpath="form_linkAlergia"][title]') ||
+        document.querySelector('a[title][wicketpath*="linkAlergia"]');
 
-    if(mAlergia){
+    const alergiaTitulo = (
+        alergiaEl?.getAttribute("title") || ""
+    ).trim();
 
-        const valor = mAlergia[1]
-            .replace(/\[\+\]/g, "")
-            .replace(/\[-\]/g, "")
-            .replace(/\./g, "")
+    if(alergiaTitulo){
+        const valorAlergia = alergiaTitulo
+            .replace(/\s+/g, " ")
+            .replace(/\.\.\.$/, "")
             .trim();
 
+        // Só aceita um valor que veio do TITLE do elemento Alergia.
+        // Isso impede que FC, SAT, peso, CMB ou outros parâmetros
+        // sejam confundidos com alergia.
         if(
-            valor &&
-            !/^(ANOTAÇÕES?|OBSERVAÇÕES?|OBSERVACOES?|NEGA|NENHUMA|NAO|NÃO|SEM INFORMAÇÕES?|SEM INFORMACOES?)$/i.test(valor)
+            valorAlergia &&
+            !/^(ALERGIA|ALERGIAS|NEGA|NENHUMA|NÃO|NAO|SEM ALERGIA|SEM ALERGIAS|N\/A|NA)$/i.test(valorAlergia)
         ){
-            alergia = valor.toUpperCase();
+            alergia = valorAlergia.toUpperCase();
         }
     }
 
@@ -872,6 +914,10 @@ function preencherEvolucao(opcoes = {}){
         `FR: ${fr}`,
         `DX: ${dx}`
     ].join(" - ");
+
+    // Peso aparece em TODOS os modos. Se não for encontrado,
+    // permanece explicitamente como NT.
+    const pesoLinha = `# PESO: ${peso} kg`;
 
     // ------------------------------
     // EXAMES FÍSICOS
@@ -892,10 +938,9 @@ function preencherEvolucao(opcoes = {}){
 
     const examePed = `# EXAME FÍSICO:
 
-BOM ESTADO GERAL, CORADO, EUPNEICO, ALERTA E ATIVO.
-APARELHO CARDIOVASCULAR: RITMO CARDÍACO REGULAR, EM DOIS TEMPOS, BULHAS NORMOFONÉTICAS, SEM SOPROS AUDÍVEIS.
-APARELHO RESPIRATÓRIO: MURMÚRIO VESICULAR UNIVERSALMENTE AUDÍVEL, SEM RUÍDOS ADVENTÍCIOS, SEM SINAIS DE DESCONFORTO RESPIRATÓRIO.
-
+- BOM ESTADO GERAL, CORADO, EUPNEICO, ALERTA E ATIVO.
+- APARELHO CARDIOVASCULAR: RITMO CARDÍACO REGULAR, EM DOIS TEMPOS, BULHAS NORMOFONÉTICAS, SEM SOPROS AUDÍVEIS.
+- APARELHO RESPIRATÓRIO: MURMÚRIO VESICULAR UNIVERSALMENTE AUDÍVEL, SEM RUÍDOS ADVENTÍCIOS, SEM SINAIS DE DESCONFORTO RESPIRATÓRIO.
 - ABDOME PLANO, FLÁCIDO, INDOLOR À PALPAÇÃO, SEM SINAIS DE IRRITAÇÃO PERITONEAL, COM RUÍDOS HIDROAÉREOS PRESENTES.
 - EXTREMIDADES SEM EDEMAS, COM PULSOS PERIFÉRICOS PALPÁVEIS E SIMÉTRICOS, PERFUSÃO PERIFÉRICA PRESERVADA.`;
 
@@ -918,6 +963,8 @@ APARELHO RESPIRATÓRIO: MURMÚRIO VESICULAR UNIVERSALMENTE AUDÍVEL, SEM RUÍDOS
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
 
+${pesoLinha}
+
 # SSVV: ${ssvv}
 
 ${exameAtendimento}
@@ -935,6 +982,8 @@ ${exameAtendimento}
 
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
+
+${pesoLinha}
 
 # SSVV: ${ssvv}
 
@@ -954,6 +1003,8 @@ ${examePed}
 
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
+
+${pesoLinha}
 
 # SSVV: ${ssvv}
 
@@ -3534,6 +3585,4 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
-
-
 
