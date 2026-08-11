@@ -284,15 +284,19 @@ document.addEventListener("click",function(e){
 painel.style.cssText=`
 display:flex;
 align-items:center;
-gap:15px;
+gap:0;
 
 height:100%;
 
-padding:0 20px;
+padding:0;
 
 background:#f8f8f8;
 
-flex:1;
+flex:1 1 auto;
+min-width:0;
+
+overflow-x:auto;
+overflow-y:hidden;
 `;
 //--------------------------------------------------
 // BOTÃO RELATÓRIO
@@ -412,6 +416,56 @@ cid.onclick=function(){
     abrirMenuCID();
 
 };
+//--------------------------------------------------
+// BOTÃO ATESTADO
+//--------------------------------------------------
+
+const atestado = document.createElement("div");
+
+atestado.innerHTML="📜 Atestado";
+
+atestado.style.cssText=`
+display:flex;
+align-items:center;
+justify-content:center;
+
+height:100%;
+
+min-width:145px;
+flex:0 0 145px;
+box-sizing:border-box;
+
+padding:0 18px;
+
+font-size:18px;
+font-weight:bold;
+
+color:#222;
+
+background:#f8f8f8;
+
+cursor:pointer;
+
+user-select:none;
+
+border-left:1px solid #d8d8d8;
+`;
+
+atestado.onmouseover=function(){
+    atestado.style.background="#ececec";
+};
+
+atestado.onmouseout=function(){
+    atestado.style.background="transparent";
+};
+
+atestado.onclick=function(e){
+    e.stopPropagation();
+    abrirMenuAtestado();
+};
+
+console.log("📜 [CELK Helper] Botão ATESTADO criado.");
+
 //--------------------------------------------------
 // BOTÃO NEWS
 //--------------------------------------------------
@@ -589,10 +643,18 @@ function atualizarCamposAlta(){
     );
 
 }
+// Ordem fixa da barra: Relatório → CID → Atestado → NEWS → Atualizar
 painel.appendChild(relatorio);
 painel.appendChild(cid);
+painel.appendChild(atestado);
 painel.appendChild(news);
 painel.appendChild(atualizar);
+
+// Garante que o Atestado fique visível mesmo quando a largura da janela
+// for menor que a soma dos botões.
+[relatorio, cid, atestado, news, atualizar].forEach(function(el){
+    el.style.flexShrink = "0";
+});
 
 
 barra.appendChild(grupoAtendimento);
@@ -610,6 +672,42 @@ if (topo) {
     document.body.appendChild(barra);
 
 }
+
+//--------------------------------------------------
+// GARANTIA DE PRESENÇA DO BOTÃO ATESTADO
+//--------------------------------------------------
+
+function garantirBotaoAtestado(){
+
+    const barraAtual = document.getElementById("celk-helper");
+    if(!barraAtual) return;
+
+    const painelAtual = barraAtual.querySelector(
+        'div[style*="overflow-x"]'
+    );
+
+    if(!painelAtual) return;
+
+    const btn = [...painelAtual.children].find(function(el){
+        return (el.textContent || "").trim().toUpperCase().includes("ATESTADO");
+    });
+
+    if(btn){
+        btn.style.display = "flex";
+        btn.style.visibility = "visible";
+        btn.style.opacity = "1";
+        btn.style.flex = "0 0 145px";
+        btn.style.minWidth = "145px";
+        return;
+    }
+
+    console.warn("[CELK Helper] Botão Atestado não encontrado na barra.");
+}
+
+setTimeout(garantirBotaoAtestado, 100);
+setTimeout(garantirBotaoAtestado, 500);
+setTimeout(garantirBotaoAtestado, 1500);
+
 const menu=document.createElement("div");
 
 menu.style.cssText=`
@@ -1389,6 +1487,520 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
     console.log("Paciente salvo:", nome);
 
 }
+
+//--------------------------------------------------
+// ATESTADO MÉDICO — MENU
+//--------------------------------------------------
+
+function abrirMenuAtestado(){
+
+    if(document.getElementById("celk-atestado-overlay")){
+        return;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = "celk-atestado-overlay";
+
+    overlay.style.cssText = `
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.45);
+        z-index:100000000;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-family:Segoe UI,Arial,sans-serif;
+    `;
+
+    const caixa = document.createElement("div");
+
+    caixa.style.cssText = `
+        width:380px;
+        max-width:90vw;
+        background:#fff;
+        border-radius:8px;
+        box-shadow:0 8px 30px rgba(0,0,0,.35);
+        padding:22px;
+        box-sizing:border-box;
+    `;
+
+    caixa.innerHTML = `
+        <div style="font-size:20px;font-weight:700;margin-bottom:18px;">
+            📜 ATESTADO MÉDICO
+        </div>
+
+        <label style="display:block;font-weight:600;margin-bottom:6px;">
+            Quantos dias de afastamento?
+        </label>
+
+        <input
+            id="celk-atestado-dias"
+            type="number"
+            min="1"
+            step="1"
+            value="1"
+            style="
+                width:100%;
+                box-sizing:border-box;
+                padding:9px;
+                font-size:18px;
+                border:1px solid #bbb;
+                border-radius:5px;
+                margin-bottom:18px;
+            "
+        >
+
+        <div style="font-weight:600;margin-bottom:8px;">
+            Incluir CID no atestado?
+        </div>
+
+        <div style="display:flex;gap:8px;">
+            <button id="celk-atestado-com-cid"
+                style="
+                    flex:1;
+                    padding:11px;
+                    border:none;
+                    border-radius:5px;
+                    background:#2563eb;
+                    color:#fff;
+                    font-weight:700;
+                    cursor:pointer;
+                ">
+                SIM — COM CID
+            </button>
+
+            <button id="celk-atestado-sem-cid"
+                style="
+                    flex:1;
+                    padding:11px;
+                    border:1px solid #aaa;
+                    border-radius:5px;
+                    background:#f5f5f5;
+                    color:#222;
+                    font-weight:700;
+                    cursor:pointer;
+                ">
+                NÃO — SEM CID
+            </button>
+        </div>
+
+        <button id="celk-atestado-cancelar"
+            style="
+                width:100%;
+                margin-top:12px;
+                padding:9px;
+                border:1px solid #ccc;
+                border-radius:5px;
+                background:#fff;
+                cursor:pointer;
+            ">
+            Cancelar
+        </button>
+
+        <div style="
+            margin-top:12px;
+            font-size:12px;
+            color:#666;
+            line-height:1.4;
+        ">
+            COM CID: o campo do CID ficará disponível para você digitar.
+            SEM CID: o CID será desativado e os campos serão limpos.
+        </div>
+    `;
+
+    overlay.appendChild(caixa);
+    document.body.appendChild(overlay);
+
+    const fechar = () => {
+        overlay.remove();
+    };
+
+    overlay.addEventListener("click", function(e){
+        if(e.target === overlay){
+            fechar();
+        }
+    });
+
+    document.getElementById("celk-atestado-cancelar").onclick = fechar;
+
+    document.getElementById("celk-atestado-com-cid").onclick = async function(){
+
+        const dias = Number(
+            document.getElementById("celk-atestado-dias").value
+        );
+
+        if(!Number.isInteger(dias) || dias < 1){
+            alert("Informe uma quantidade válida de dias.");
+            return;
+        }
+
+        fechar();
+        await prepararAtestado(dias, true);
+    };
+
+    document.getElementById("celk-atestado-sem-cid").onclick = async function(){
+
+        const dias = Number(
+            document.getElementById("celk-atestado-dias").value
+        );
+
+        if(!Number.isInteger(dias) || dias < 1){
+            alert("Informe uma quantidade válida de dias.");
+            return;
+        }
+
+        fechar();
+        await prepararAtestado(dias, false);
+    };
+
+    setTimeout(() => {
+        document.getElementById("celk-atestado-dias")?.focus();
+        document.getElementById("celk-atestado-dias")?.select();
+    }, 0);
+}
+
+
+//--------------------------------------------------
+// ATESTADO MÉDICO — ABRIR TELA
+//--------------------------------------------------
+
+async function prepararAtestado(dias, comCid){
+
+    try{
+
+        // Se já estiver na tela de atestado, apenas configura.
+        let campoDias = document.querySelector(
+            "#AtestadoMedico_NumeroDias.form-input"
+        );
+
+        if(!campoDias){
+
+            // Primeiro tenta exatamente a estratégia usada pelo
+            // script modelo antigo: localizar a conduta "Atestado Médico"
+            // no Knockout e carregar a tela oficial do CELK.
+            try{
+
+                const elementoConduta =
+                    document.querySelector('span[data-bind*="DscConduta"]');
+
+                if(elementoConduta && window.ko?.contextFor){
+
+                    const root = window.ko.contextFor(elementoConduta)?.$root;
+
+                    const conduta = root?.Condutas?.()
+                        ?.flatMap(x => x.ListaCondutas?.() || [])
+                        ?.find(x =>
+                            String(x.DscConduta?.() || "")
+                                .trim()
+                                .toUpperCase() === "ATESTADO MÉDICO"
+                        );
+
+                    if(conduta && typeof root.CarregaCondutas === "function"){
+
+                        root.CarregaCondutas(
+                            conduta.CodAcaoDestino()
+                        );
+
+                    }
+                }
+
+            }catch(e){
+                console.warn(
+                    "[CELK Helper] não foi possível abrir pela conduta:",
+                    e
+                );
+            }
+
+            // Aguarda a tela oficial.
+            campoDias = await celkEsperarElemento(
+                "#AtestadoMedico_NumeroDias.form-input",
+                10000
+            );
+        }
+
+        // Fallback: usa "Novo Documento" e escolhe o modelo
+        // diretamente no modal mostrado pelo CELK.
+        if(!campoDias){
+
+            const novoDocumento = [...document.querySelectorAll(
+                "button, a, input[type='button'], input[type='submit']"
+            )].find(el => {
+
+                const txt = (
+                    el.innerText ||
+                    el.value ||
+                    el.getAttribute("title") ||
+                    ""
+                ).trim().toUpperCase();
+
+                return txt === "NOVO DOCUMENTO" ||
+                       txt === "NOVO DOCUMENTO";
+            });
+
+            if(novoDocumento){
+                novoDocumento.click();
+            }else{
+                // TinyMCE também possui o botão "Novo documento".
+                const tinyNovo = document.querySelector(
+                    'a.mce_newdocument[title="Novo documento"]'
+                );
+
+                if(tinyNovo){
+                    tinyNovo.click();
+                }
+            }
+
+            const tipo = await celkEsperarElemento(
+                "select",
+                8000,
+                function(el){
+
+                    const opcoes = [...el.options]
+                        .map(o => (o.textContent || "").trim().toUpperCase());
+
+                    return opcoes.some(t =>
+                        t.includes("ATESTADO MEDICO") ||
+                        t.includes("ATESTADO MÉDICO")
+                    );
+                }
+            );
+
+            if(tipo){
+
+                const alvo = comCid
+                    ? ["ATESTADO MEDICO COM CID (IDEAS)", "ATESTADO MÉDICO COM CID (IDEAS)"]
+                    : ["ATESTADO MEDICO (IDEAS)", "ATESTADO MÉDICO (IDEAS)"];
+
+                const opcao = [...tipo.options].find(o => {
+
+                    const txt = (o.textContent || "")
+                        .replace(/\s+/g, " ")
+                        .trim()
+                        .toUpperCase();
+
+                    return alvo.includes(txt) ||
+                           txt === (comCid
+                               ? "ATESTADO MEDICO COM CID (IDEAS)"
+                               : "ATESTADO MEDICO (IDEAS)");
+                });
+
+                if(opcao){
+
+                    tipo.value = opcao.value;
+
+                    tipo.dispatchEvent(new Event("input", {
+                        bubbles:true
+                    }));
+
+                    tipo.dispatchEvent(new Event("change", {
+                        bubbles:true
+                    }));
+
+                    tipo.dispatchEvent(new Event("blur", {
+                        bubbles:true
+                    }));
+                }
+            }
+
+            campoDias = await celkEsperarElemento(
+                "#AtestadoMedico_NumeroDias.form-input",
+                10000
+            );
+        }
+
+        if(!campoDias){
+
+            alert(
+                "Não consegui abrir o formulário de Atestado Médico."
+            );
+
+            return;
+        }
+
+        // Número de dias.
+        campoDias.value = String(dias);
+
+        campoDias.dispatchEvent(new Event("input", {
+            bubbles:true
+        }));
+
+        campoDias.dispatchEvent(new Event("change", {
+            bubbles:true
+        }));
+
+        campoDias.dispatchEvent(new Event("blur", {
+            bubbles:true
+        }));
+
+        // CID.
+        const checkCid = document.querySelector(
+            "#AtestadoMedico_ImpressaoCodCid"
+        );
+
+        if(checkCid){
+
+            checkCid.checked = !!comCid;
+
+            ["click","input","change","blur"].forEach(tipo => {
+
+                checkCid.dispatchEvent(
+                    new Event(tipo, {
+                        bubbles:true,
+                        cancelable:true
+                    })
+                );
+
+            });
+        }
+
+        // Se COM CID, deixa o campo disponível e vazio para
+        // o médico digitar o CID.
+        if(comCid){
+
+            const campoCid = document.querySelector(
+                "#AtestadoMedico_DscCid"
+            );
+
+            const campoNumCid = document.querySelector(
+                "#AtestadoMedico_NumCid"
+            );
+
+            if(campoCid){
+                campoCid.value = "";
+                campoCid.dispatchEvent(
+                    new Event("input",{bubbles:true})
+                );
+                campoCid.dispatchEvent(
+                    new Event("change",{bubbles:true})
+                );
+            }
+
+            if(campoNumCid){
+                campoNumCid.value = "";
+                campoNumCid.dispatchEvent(
+                    new Event("input",{bubbles:true})
+                );
+                campoNumCid.dispatchEvent(
+                    new Event("change",{bubbles:true})
+                );
+            }
+
+            setTimeout(() => {
+                (
+                    document.querySelector("#AtestadoMedico_DscCid") ||
+                    document.querySelector("#AtestadoMedico_NumCid")
+                )?.focus();
+            }, 100);
+
+        }else{
+
+            // SEM CID: limpa e desmarca.
+            const campoCid = document.querySelector(
+                "#AtestadoMedico_DscCid"
+            );
+
+            const campoNumCid = document.querySelector(
+                "#AtestadoMedico_NumCid"
+            );
+
+            if(campoCid){
+                campoCid.value = "";
+                campoCid.dispatchEvent(
+                    new Event("input",{bubbles:true})
+                );
+                campoCid.dispatchEvent(
+                    new Event("change",{bubbles:true})
+                );
+            }
+
+            if(campoNumCid){
+                campoNumCid.value = "";
+                campoNumCid.dispatchEvent(
+                    new Event("input",{bubbles:true})
+                );
+                campoNumCid.dispatchEvent(
+                    new Event("change",{bubbles:true})
+                );
+            }
+        }
+
+        console.log(
+            "[CELK Helper] Atestado preparado:",
+            dias,
+            "dia(s)",
+            comCid ? "COM CID" : "SEM CID"
+        );
+
+        /*
+         * ASSINATURA:
+         * Não dispara Salvar/Assinar automaticamente.
+         * O documento fica preparado para a assinatura normal
+         * do profissional logado no CELK.
+         *
+         * A identificação profissional permanece a do usuário
+         * logado (RAYNDRICK KELRYN ASSIS LIMA / CRM 30235).
+         */
+
+    }catch(e){
+
+        console.error(
+            "[CELK Helper] erro ao preparar atestado:",
+            e
+        );
+
+        alert(
+            "Erro ao preparar o Atestado Médico. " +
+            "Veja o Console para detalhes."
+        );
+    }
+}
+
+
+//--------------------------------------------------
+// ESPERAR ELEMENTO
+//--------------------------------------------------
+
+function celkEsperarElemento(selector, timeout=8000, filtro=null){
+
+    return new Promise(resolve => {
+
+        const inicio = Date.now();
+
+        const procurar = () => {
+
+            const elementos = [...document.querySelectorAll(selector)];
+
+            const encontrado = elementos.find(el => {
+
+                if(typeof filtro === "function"){
+                    try{
+                        return filtro(el);
+                    }catch(e){
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            if(encontrado){
+                resolve(encontrado);
+                return;
+            }
+
+            if(Date.now() - inicio >= timeout){
+                resolve(null);
+                return;
+            }
+
+            setTimeout(procurar, 150);
+        };
+
+        procurar();
+    });
+}
+
+
 function selecionarAltaMedica(){
 
     // Campo "Encaminhamento" identificado no CELK:
