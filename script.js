@@ -1763,13 +1763,14 @@ function obterDadosPacienteDeclaracao(){
         hourCycle:"h23"
     });
 
-    return {
-        nome,
-        idade,
-        chegada,
-        saida,
-        data
-    };
+ return {
+    nome,
+    idade,
+    chegada,
+    saida,
+    data,
+    nomeMae: obterNomeMae()
+};
 }
 
 function localizarNovoDocumentoDeclaracao(){
@@ -2059,15 +2060,83 @@ function montarDeclaracaoPaciente(dados){
         </p>
     `;
 }
+function obterNomeMae(){
 
+    const elementos = [
+        ...document.querySelectorAll(
+            "input, textarea, select, label, span, div, td"
+        )
+    ];
+
+    for(const el of elementos){
+
+        const texto = (
+            el.innerText ||
+            el.textContent ||
+            el.getAttribute("title") ||
+            el.getAttribute("aria-label") ||
+            el.getAttribute("placeholder") ||
+            ""
+        )
+        .replace(/\s+/g," ")
+        .trim();
+
+        if(!texto) continue;
+
+        // Procura textos como:
+        // MÃE: NOME DA MÃE
+        // MÃE - NOME DA MÃE
+        // MÃE NOME DA MÃE
+        const match = texto.match(
+            /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
+        );
+
+        if(match){
+
+            const nome = match[1]
+                .replace(/\s+/g," ")
+                .trim();
+
+            if(
+                nome &&
+                nome.length > 3 &&
+                !/^(REFERE|RELATA|NEGA|INFORMA|ACOMPANHA)$/i.test(nome)
+            ){
+                return nome.toUpperCase();
+            }
+        }
+    }
+
+    // Procura no texto geral da página
+    const tela = document.body.innerText || "";
+
+    const matchTela = tela.match(
+        /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
+    );
+
+    if(matchTela){
+        return matchTela[1]
+            .replace(/\s+/g," ")
+            .trim()
+            .toUpperCase();
+    }
+
+    return "NÃO IDENTIFICADO";
+}
 function montarDeclaracaoAcompanhante(dados){
 
     return `
-        <p style="margin:0 0 18px 0;"><strong>DECLARAÇÃO DE COMPARECIMENTO</strong></p>
+        <p style="margin:0 0 18px 0;">
+            <strong>DECLARAÇÃO DE COMPARECIMENTO</strong>
+        </p>
 
         <p style="margin:0 0 12px 0;">
             Nome do Paciente: <strong>${dados.nome}</strong>,
             Idade: <strong>${dados.idade}</strong>
+        </p>
+
+        <p style="margin:0 0 12px 0;">
+            Nome da Mãe: <strong>${dados.nomeMae}</strong>
         </p>
 
         <p style="margin:0 0 8px 0;">
@@ -2075,7 +2144,8 @@ function montarDeclaracaoAcompanhante(dados){
         </p>
 
         <p style="margin:0;">( ) Cônjuge ou Companheiro(a)</p>
-        <p style="margin:0;">( X ) Mãe / Pai</p>
+        <p style="margin:0;">( X ) Mãe</p>
+        <p style="margin:0;">( ) Pai</p>
         <p style="margin:0;">( ) Avó / Avô</p>
         <p style="margin:0;">( ) Irmão / Irmã</p>
         <p style="margin:0;">( ) Tia / Tio</p>
