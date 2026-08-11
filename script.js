@@ -51,6 +51,9 @@ window.celk.init = function(){
 
     criarInterface();
 
+    // Alimenta o cache quando estivermos na Consulta de Atendimentos.
+    try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+
     if(window.celk.intervalo) return;
 
     window.celk.intervalo = setInterval(function(){
@@ -62,6 +65,8 @@ window.celk.init = function(){
             criarInterface();
 
         }
+
+        try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
 
     },1000);
 
@@ -1177,6 +1182,7 @@ painel.appendChild(atestado);
 painel.appendChild(declaracao);
 painel.appendChild(news);
 painel.appendChild(atualizar);
+painel.appendChild(evasao);
 
 // Garante que o Atestado fique visível mesmo quando a largura da janela
 // for menor que a soma dos botões.
@@ -2065,160 +2071,210 @@ function elementoVisivel(el){
     }
 }
 
-function obterClassificacao(nomePaciente, somenteCorrespondente){
+function extrairMapaClassificacoesDaTabela(){
 
-    const nome = normalizarClassificacaoTexto(nomePaciente);
+    const mapa = {};
+    const tabelas = Array.from(document.querySelectorAll("table"));
 
-    // =========================================================
-    // FONTE PRINCIPAL DO CELK
-    // =========================================================
-    // Na tabela de atendimentos a classificação está no elemento:
-    // div ... class="icon32 ball-orange"
-    // e o wicketpath observado é semelhante a:
-    // form_table_table_body_rows_501_cells_5_cell
-    //
-    // Portanto NÃO podemos pegar simplesmente o primeiro ball- da
-    // página, pois ele pode pertencer a OUTRO paciente.
-    // Primeiro localizamos a linha do paciente e, dentro dela,
-    // buscamos a célula de classificação.
-    // =========================================================
+    function nomeNormalizado(v){
+        return normalizarClassificacaoTexto(v)
+            .replace(/\s+/g," ")
+            .trim();
+    }
 
-    const classificacoes = Array.from(
-        document.querySelectorAll(
-            'div.icon32[class*="ball-"], ' +
-            'div[class*="icon32"][class*="ball-"], ' +
-            '[wicketpath*="cells_5_cell"][class*="ball-"], ' +
-            '[class*="ball-red"], [class*="ball-orange"], ' +
-            '[class*="ball-yellow"], [class*="ball-green"], ' +
-            '[class*="ball-blue"]'
-        )
-    );
+    function pareceNomePaciente(texto){
+        const t = nomeNormalizado(texto);
 
-    // ---------------------------------------------------------
-    // 1. TENTA ENCONTRAR O ÍCONE NA MESMA LINHA DO PACIENTE
-    // ---------------------------------------------------------
-    if(nome && nome.length >= 4){
+        if(!t || t.length < 5) return false;
+        if(/\d/.test(t)) return false;
+        if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO)$/.test(t)) return false;
+        if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERG[ÊE]NCIA|IDOSOS|URG[ÊE]NCIA/.test(t)) return false;
 
-        const elementosNome = Array.from(document.querySelectorAll("body *"))
-            .filter(function(el){
-                if(!elementoVisivel(el)) return false;
+        const palavras = t.split(/\s+/).filter(Boolean);
+        return palavras.length >= 2;
+    }
 
-                const texto = normalizarClassificacaoTexto(el.textContent || "");
+    function classeDaLinha(tr){
+        const el = tr.querySelector(
+            '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"]'
+        );
 
-                return (
-                    texto === nome ||
-                    (texto.length < nome.length + 80 && texto.includes(nome))
-                );
+        return classeParaClassificacao(el);
+    }
+
+    for(const tabela of tabelas){
+
+        const linhas = Array.from(tabela.querySelectorAll("tr"));
+        if(!linhas.length) continue;
+
+        let indicePaciente = -1;
+
+        // Procura o cabeçalho real da coluna Paciente.
+        for(const linha of linhas.slice(0,5)){
+            const celulas = Array.from(linha.querySelectorAll("th,td"));
+
+            celulas.forEach(function(td, index){
+                const txt = nomeNormalizado(td.textContent || "");
+
+                if(txt === "PACIENTE" || txt.includes("PACIENTE")){
+                    indicePaciente = index;
+                }
             });
 
-        for(const nomeEl of elementosNome){
+            if(indicePaciente >= 0) break;
+        }
 
-            let bloco = nomeEl;
+        for(const tr of linhas){
 
-            // Sobe até encontrar um container que represente a linha.
-            for(let nivel = 0; nivel < 10 && bloco; nivel++){
+            const classificacao = classeDaLinha(tr);
+            if(classificacao === "NÃO IDENTIFICADA") continue;
 
-                const wicket = String(bloco.getAttribute?.("wicketpath") || "");
-                const tag = String(bloco.tagName || "").toLowerCase();
+            const celulas = Array.from(tr.querySelectorAll("td,th"));
+            if(!celulas.length) continue;
 
-                const pareceLinha =
-                    tag === "tr" ||
-                    /table_body_rows/i.test(wicket) ||
-                    /_rows_/i.test(wicket) ||
-                    bloco.querySelector?.('[wicketpath*="cells_5_cell"]');
+            let nome = "";
 
-                if(pareceLinha){
-
-                    // Primeiro tenta EXATAMENTE a célula 5.
-                    const celula5 = bloco.querySelector?.(
-                        '[wicketpath*="cells_5_cell"][class*="ball-"]'
-                    );
-
-                    if(celula5){
-                        const classificacao = classeParaClassificacao(celula5);
-
-                        if(classificacao !== "NÃO IDENTIFICADA"){
-                            console.log(
-                                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA NA LINHA:",
-                                nomePaciente,
-                                classificacao,
-                                celula5
-                            );
-                            return classificacao;
-                        }
-                    }
-
-                    // Fallback: qualquer ball- dentro da mesma linha.
-                    const daLinha = Array.from(
-                        bloco.querySelectorAll?.(
-                            'div.icon32[class*="ball-"], ' +
-                            'div[class*="icon32"][class*="ball-"]'
-                        ) || []
-                    );
-
-                    for(const el of daLinha){
-                        const classificacao = classeParaClassificacao(el);
-                        if(classificacao !== "NÃO IDENTIFICADA"){
-                            console.log(
-                                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA NA LINHA:",
-                                nomePaciente,
-                                classificacao
-                            );
-                            return classificacao;
-                        }
-                    }
+            // 1. Melhor opção: mesma posição da coluna Paciente.
+            if(indicePaciente >= 0 && celulas[indicePaciente]){
+                const candidato = celulas[indicePaciente].textContent || "";
+                if(pareceNomePaciente(candidato)){
+                    nome = candidato;
                 }
+            }
 
-                bloco = bloco.parentElement;
+            // 2. Fallback: célula com nome mais provável.
+            if(!nome){
+                const candidatos = celulas
+                    .map(function(td){
+                        return {
+                            texto: td.textContent || "",
+                            classe: String(td.className || ""),
+                            wicket: String(td.getAttribute("wicketpath") || "")
+                        };
+                    })
+                    .filter(function(item){
+                        return pareceNomePaciente(item.texto);
+                    })
+                    .sort(function(a,b){
+                        const aNome = /text-left/i.test(a.classe) ? 1 : 0;
+                        const bNome = /text-left/i.test(b.classe) ? 1 : 0;
+                        if(aNome !== bNome) return bNome - aNome;
+                        return b.texto.length - a.texto.length;
+                    });
+
+                if(candidatos[0]){
+                    nome = candidatos[0].texto;
+                }
+            }
+
+            if(nome){
+                mapa[nomeNormalizado(nome)] = classificacao;
             }
         }
     }
 
-    // Em modo estrito, NÃO usa o primeiro ícone da página.
-    // Isso é usado para corrigir registros antigos do relatório
-    // somente quando conseguimos relacionar a classificação à
-    // linha exata daquele paciente.
+    return mapa;
+}
+
+function sincronizarClassificacoesDaTabela(){
+
+    const mapa = extrairMapaClassificacoesDaTabela();
+    if(!Object.keys(mapa).length) return mapa;
+
+    let cache = {};
+    try{
+        cache = JSON.parse(
+            localStorage.getItem("celk_classificacoes_cache") || "{}"
+        );
+    }catch(_){
+        cache = {};
+    }
+
+    Object.assign(cache, mapa);
+
+    localStorage.setItem(
+        "celk_classificacoes_cache",
+        JSON.stringify(cache)
+    );
+
+    console.log(
+        "[CELK Helper V32] CLASSIFICAÇÕES SINCRONIZADAS:",
+        Object.keys(mapa).length
+    );
+
+    return mapa;
+}
+
+function obterClassificacaoDoCache(nomePaciente){
+
+    const nome = normalizarClassificacaoTexto(nomePaciente);
+    if(!nome) return "NÃO IDENTIFICADA";
+
+    try{
+        const cache = JSON.parse(
+            localStorage.getItem("celk_classificacoes_cache") || "{}"
+        );
+
+        return cache[nome] || "NÃO IDENTIFICADA";
+    }catch(_){
+        return "NÃO IDENTIFICADA";
+    }
+}
+
+function obterClassificacao(nomePaciente, somenteCorrespondente){
+
+    const nome = normalizarClassificacaoTexto(nomePaciente);
+
+    // Se estivermos na tela de consulta, primeiro constrói o mapa
+    // real a partir das linhas da tabela.
+    sincronizarClassificacoesDaTabela();
+
+    // 1. Cache alimentado pela tabela de atendimentos.
+    const doCache = obterClassificacaoDoCache(nomePaciente);
+    if(doCache !== "NÃO IDENTIFICADA"){
+        console.log(
+            "[CELK Helper V32] CLASSIFICAÇÃO PELO CACHE:",
+            nomePaciente,
+            doCache
+        );
+        return doCache;
+    }
+
+    // 2. Tenta diretamente na linha do paciente, quando a tabela ainda
+    // está presente nesta página.
+    if(nome && nome.length >= 4){
+
+        const tabelas = Array.from(document.querySelectorAll("table"));
+
+        for(const tabela of tabelas){
+            const linhas = Array.from(tabela.querySelectorAll("tr"));
+
+            for(const tr of linhas){
+                const textoLinha = normalizarClassificacaoTexto(tr.textContent || "");
+
+                if(!textoLinha.includes(nome)) continue;
+
+                const elemento = tr.querySelector(
+                    '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"]'
+                );
+
+                const classificacao = classeParaClassificacao(elemento);
+
+                if(classificacao !== "NÃO IDENTIFICADA"){
+                    return classificacao;
+                }
+            }
+        }
+    }
+
+    // 3. Em modo estrito, nunca pega a bola de outro paciente.
     if(somenteCorrespondente){
         return "NÃO IDENTIFICADA";
     }
 
-    // ---------------------------------------------------------
-    // 2. TENTA PELO WICKETPATH DA CÉLULA 5
-    // ---------------------------------------------------------
-    const celulas5 = Array.from(
-        document.querySelectorAll(
-            '[wicketpath*="cells_5_cell"][class*="ball-"]'
-        )
-    );
-
-    for(const celula of celulas5){
-        const classificacao = classeParaClassificacao(celula);
-        if(classificacao !== "NÃO IDENTIFICADA"){
-            console.log(
-                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA EM CELLS_5_CELL:",
-                classificacao
-            );
-            return classificacao;
-        }
-    }
-
-    // ---------------------------------------------------------
-    // 3. FALLBACK FINAL — PRIMEIRO ÍCONE VISÍVEL
-    // ---------------------------------------------------------
-    // Só usa este fallback quando não foi possível relacionar o
-    // paciente à linha. Isso evita o erro anterior na maioria das
-    // situações em que existem vários pacientes na página.
-    const elemento = classificacoes.find(elementoVisivel) || classificacoes[0];
-
-    const classificacaoFallback = classeParaClassificacao(elemento);
-
-    console.log(
-        "[CELK Helper V32] CLASSIFICAÇÃO FALLBACK:",
-        nomePaciente,
-        classificacaoFallback
-    );
-
-    return classificacaoFallback;
+    // 4. Na tela do atendimento não há a tabela. Mantém NT até que
+    // o cache seja alimentado pela tela de Consulta de Atendimentos.
+    return "NÃO IDENTIFICADA";
 }
 
 function adicionarRelatorio(nome, idade, chegada, classificacao){
@@ -5228,10 +5284,9 @@ function atualizarClassificacoesRelatorioVisiveis(){
 
         // Somente aceita uma classificação encontrada na linha
         // correspondente ao paciente. Nunca usa fallback global.
-        const classificacao = obterClassificacao(
-            paciente.nome,
-            true
-        );
+        const classificacao = obterClassificacaoDoCache(paciente.nome) !== "NÃO IDENTIFICADA"
+            ? obterClassificacaoDoCache(paciente.nome)
+            : obterClassificacao(paciente.nome, true);
 
         if(
             classificacao &&
@@ -5259,6 +5314,9 @@ function atualizarClassificacoesRelatorioVisiveis(){
 }
 
 function abrirRelatorio(){
+
+    // Primeiro tenta capturar as classificações reais da tabela atual.
+    try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
 
     // Corrige classificações antigas que ainda estejam como NÃO IDENTIFICADA.
     atualizarClassificacoesRelatorioVisiveis();
