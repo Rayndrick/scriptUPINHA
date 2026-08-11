@@ -2094,6 +2094,69 @@ async function preencherDiasNoDocumento(dias, timeout=12000){
 }
 
 
+
+function forcarAtestadoNaMesmaAba(){
+
+    const restaurar = [];
+
+    const registrarTarget = (el) => {
+
+        if(!el || !("target" in el)){
+            return;
+        }
+
+        const original = el.getAttribute("target");
+
+        if(original !== null){
+            restaurar.push(() => el.setAttribute("target", original));
+        }else{
+            restaurar.push(() => el.removeAttribute("target"));
+        }
+
+        el.setAttribute("target","_self");
+    };
+
+    // Links e formulários são os principais responsáveis por o CELK
+    // abrir "Novo separador" durante a criação do documento.
+    document.querySelectorAll(
+        "a[target], form[target]"
+    ).forEach(registrarTarget);
+
+    // Também força os elementos existentes dentro de diálogos/modais.
+    document.querySelectorAll(
+        "[target='_blank'], [target='_new'], [target='_newtab']"
+    ).forEach(el => {
+
+        if(el.matches("a,form")){
+            registrarTarget(el);
+        }
+
+    });
+
+    // Captura submits feitos pelo formulário do CELK durante este fluxo.
+    const onSubmit = function(e){
+
+        const form = e.target;
+
+        if(form && form.tagName === "FORM"){
+            form.setAttribute("target","_self");
+        }
+
+    };
+
+    document.addEventListener("submit", onSubmit, true);
+
+    return function restaurarTargets(){
+
+        document.removeEventListener("submit", onSubmit, true);
+
+        restaurar.reverse().forEach(fn => {
+            try{ fn(); }catch(_){}
+        });
+
+    };
+}
+
 function fecharJanelasAuxiliaresAtestado(janelas){
 
     if(!Array.isArray(janelas)){
@@ -2112,14 +2175,14 @@ function fecharJanelasAuxiliaresAtestado(janelas){
                 janela.close();
 
                 console.log(
-                    "[CELK Helper V28] Aba/janela auxiliar do Atestado fechada."
+                    "[CELK Helper V29] Aba/janela auxiliar do Atestado fechada."
                 );
             }
 
         }catch(e){
 
             console.log(
-                "[CELK Helper V28] Não foi possível fechar a janela auxiliar:",
+                "[CELK Helper V29] Não foi possível fechar a janela auxiliar:",
                 e
             );
 
@@ -2134,6 +2197,12 @@ async function prepararAtestado(dias, comCid){
     // A aba principal do CELK nunca é fechada.
     const janelasAtestado = [];
 
+    // O CELK estava abrindo uma terceira aba ("Novo separador").
+    // Durante o fluxo do Atestado, força links/formulários a permanecerem
+    // na própria aba para que o documento seja criado na aba do atendimento.
+    const restaurarTargetsAtestado =
+        forcarAtestadoNaMesmaAba();
+
     const windowOpenOriginal = window.open;
 
     const capturarWindowOpen = function(...args){
@@ -2144,7 +2213,7 @@ async function prepararAtestado(dias, comCid){
             janelasAtestado.push(janela);
 
             console.log(
-                "[CELK Helper V28] Janela auxiliar capturada."
+                "[CELK Helper V29] Janela auxiliar capturada."
             );
         }
 
@@ -2154,7 +2223,7 @@ async function prepararAtestado(dias, comCid){
     try{
 
         console.log(
-            "[CELK Helper V28] INICIANDO ATESTADO:",
+            "[CELK Helper V29] INICIANDO ATESTADO:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2236,7 +2305,7 @@ async function prepararAtestado(dias, comCid){
             if(documentos){
 
                 console.log(
-                    "[CELK Helper V28] Abrindo aba DOCUMENTOS."
+                    "[CELK Helper V29] Abrindo aba DOCUMENTOS."
                 );
 
                 documentos.click();
@@ -2256,7 +2325,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V28] CLICANDO EM NOVO DOCUMENTO."
+            "[CELK Helper V29] CLICANDO EM NOVO DOCUMENTO."
         );
 
         // Captura janelas/abas abertas pelo CELK durante este clique.
@@ -2282,7 +2351,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V28] MODAL MODELO DE DOCUMENTO ABERTO."
+            "[CELK Helper V29] MODAL MODELO DE DOCUMENTO ABERTO."
         );
 
         // --------------------------------------------------
@@ -2320,7 +2389,7 @@ async function prepararAtestado(dias, comCid){
         if(!opcao){
 
             console.log(
-                "[CELK Helper V28] OPÇÕES ENCONTRADAS:",
+                "[CELK Helper V29] OPÇÕES ENCONTRADAS:",
                 opcoes.map(o => o.textContent)
             );
 
@@ -2349,7 +2418,7 @@ async function prepararAtestado(dias, comCid){
         );
 
         console.log(
-            "[CELK Helper V28] MODELO SELECIONADO:",
+            "[CELK Helper V29] MODELO SELECIONADO:",
             opcao.textContent
         );
 
@@ -2396,7 +2465,7 @@ async function prepararAtestado(dias, comCid){
             if(confirmar){
 
                 console.log(
-                    "[CELK Helper V28] CONFIRMANDO MODELO."
+                    "[CELK Helper V29] CONFIRMANDO MODELO."
                 );
 
                 confirmar.click();
@@ -2436,7 +2505,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V28] ATESTADO ABERTO E DIAS PREENCHIDOS:",
+            "[CELK Helper V29] ATESTADO ABERTO E DIAS PREENCHIDOS:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2446,7 +2515,8 @@ async function prepararAtestado(dias, comCid){
         // A aba principal do atendimento permanece aberta.
         setTimeout(() => {
             fecharJanelasAuxiliaresAtestado(janelasAtestado);
-        }, 800);
+            restaurarTargetsAtestado();
+        }, 1200);
 
     }catch(e){
 
@@ -2458,8 +2528,12 @@ async function prepararAtestado(dias, comCid){
 
         fecharJanelasAuxiliaresAtestado(janelasAtestado);
 
+        try{
+            restaurarTargetsAtestado();
+        }catch(_){}
+
         console.error(
-            "[CELK Helper V28] ERRO NO ATESTADO:",
+            "[CELK Helper V29] ERRO NO ATESTADO:",
             e
         );
 
