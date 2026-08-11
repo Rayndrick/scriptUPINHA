@@ -2988,8 +2988,7 @@ async function prepararAtestado(dias, comCid){
             }
         }
         await new Promise(r => setTimeout(r, 300));
-        ajustarDocumentoAtestado()
-ajustarDocumentoAtestado(comCid);
+        aplicarLayoutAssinaturaAtestado(comCid);
 
         // Ajusta o documento depois que o modelo oficial foi aberto:
         // SEM CID remove a seção de assinatura/autorização do paciente;
