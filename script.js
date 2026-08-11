@@ -835,7 +835,7 @@ function criarBotaoAtestadoRobusto(){
     return true;
 }
 
-function garantirBotaoAtestado(){
+window.celkGarantirBotaoAtestado = function(){
 
     if(criarBotaoAtestadoRobusto()){
         return;
@@ -850,7 +850,7 @@ function garantirBotaoAtestado(){
     setTimeout(criarBotaoAtestadoRobusto,3000);
 }
 
-garantirBotaoAtestado();
+window.celkGarantirBotaoAtestado?.();
 
 const menu=document.createElement("div");
 
@@ -1767,35 +1767,73 @@ function abrirMenuAtestado(){
 
     document.getElementById("celk-atestado-cancelar").onclick = fechar;
 
-    document.getElementById("celk-atestado-com-cid").onclick = async function(){
+    // Usa delegação no próprio overlay para evitar que o CELK
+    // intercepte/reconstrua os handlers dos botões.
+    overlay.addEventListener("click", async function(e){
 
-        const dias = Number(
-            document.getElementById("celk-atestado-dias").value
+        const botao = e.target.closest(
+            "#celk-atestado-com-cid, #celk-atestado-sem-cid"
         );
 
+        if(!botao){
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const campoDiasUI =
+            document.getElementById("celk-atestado-dias");
+
+        const dias = Number(campoDiasUI?.value);
+
         if(!Number.isInteger(dias) || dias < 1){
+
             alert("Informe uma quantidade válida de dias.");
             return;
         }
 
-        fechar();
-        await prepararAtestado(dias, true);
-    };
+        const comCid =
+            botao.id === "celk-atestado-com-cid";
 
-    document.getElementById("celk-atestado-sem-cid").onclick = async function(){
-
-        const dias = Number(
-            document.getElementById("celk-atestado-dias").value
+        console.log(
+            "[CELK Helper] Botão do Atestado clicado:",
+            dias,
+            comCid ? "COM CID" : "SEM CID"
         );
 
-        if(!Number.isInteger(dias) || dias < 1){
-            alert("Informe uma quantidade válida de dias.");
-            return;
+        // Mostra imediatamente que o clique foi recebido.
+        botao.disabled = true;
+        botao.style.opacity = "0.6";
+
+        const textoOriginal = botao.textContent;
+        botao.textContent = "ABRINDO...";
+
+        try{
+
+            await prepararAtestado(dias, comCid);
+
+        }catch(err){
+
+            console.error(
+                "[CELK Helper] erro no clique do Atestado:",
+                err
+            );
+
+            alert(
+                "Não foi possível abrir o formulário de Atestado. " +
+                (err?.message || "")
+            );
+
+        }finally{
+
+            // Se o fluxo tiver removido o modal, não há nada para fazer.
+            if(document.body.contains(overlay)){
+                overlay.remove();
+            }
         }
 
-        fechar();
-        await prepararAtestado(dias, false);
-    };
+    }, true);
 
     setTimeout(() => {
         document.getElementById("celk-atestado-dias")?.focus();
@@ -1811,6 +1849,11 @@ function abrirMenuAtestado(){
 async function prepararAtestado(dias, comCid){
 
     try{
+
+        console.log(
+            "[CELK Helper] Clique recebido. Preparando formulário...",
+            {dias: dias, comCid: comCid}
+        );
 
         console.log(
             "[CELK Helper] Iniciando Atestado:",
@@ -4071,7 +4114,7 @@ function iniciarObserver(){
 
         // O CELK pode redesenhar a barra. Garante que o Atestado
         // continue imediatamente após o botão CID.
-        garantirBotaoAtestado();
+        window.celkGarantirBotaoAtestado?.();
 
         if(
             typeof tinymce !== "undefined" &&
