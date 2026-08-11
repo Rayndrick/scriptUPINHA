@@ -1,3 +1,9 @@
+// =========================================================
+// CELK HELPER — V27
+// ATESTADO: fluxo direto pelo botão "Novo Documento"
+// =========================================================
+console.log("[CELK Helper] V27 CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+
 (function () {
 
 'use strict';
@@ -1830,149 +1836,347 @@ function abrirMenuAtestado(){
 // ATESTADO MÉDICO — ABRIR TELA
 //--------------------------------------------------
 
+
+//--------------------------------------------------
+// EDITOR DO DOCUMENTO / PREENCHIMENTO DOS DIAS
+//--------------------------------------------------
+
+function normalizarTextoCelk(s){
+    return (s || "")
+        .replace(/\u00a0/g," ")
+        .replace(/\s+/g," ")
+        .trim()
+        .toUpperCase();
+}
+
+function textoTemModeloAtestado(s){
+    const t = normalizarTextoCelk(s);
+    return (
+        t.includes("ATESTO PARA OS DEVIDOS FINS") &&
+        t.includes("DIAS DE AFASTAMENTO")
+    );
+}
+
+function substituirDiasNoTexto(texto, dias){
+
+    if(!texto){
+        return texto;
+    }
+
+    // Modelo apresentado pelo CELK:
+    // necessita ____ (  ) dias de afastamento...
+    //
+    // Substitui apenas o espaço destinado à quantidade de dias.
+    let novo = texto.replace(
+        /_{2,}\s*\(\s*\)\s*(?=DIAS\s+DE\s+AFASTAMENTO)/i,
+        String(dias)
+    );
+
+    // Fallback para pequenas variações do modelo.
+    novo = novo.replace(
+        /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
+        String(dias)
+    );
+
+    return novo;
+}
+
+function preencherDiasNoElementoEditor(el, dias){
+
+    if(!el){
+        return false;
+    }
+
+    const original = el.innerText || el.textContent || "";
+
+    if(!textoTemModeloAtestado(original)){
+        return false;
+    }
+
+    const novoTexto = substituirDiasNoTexto(original, dias);
+
+    if(novoTexto === original){
+        console.log(
+            "[CELK Helper V27] Modelo encontrado, mas não achei o espaço dos dias.",
+            original
+        );
+        return false;
+    }
+
+    // Contenteditable.
+    if(el.isContentEditable){
+
+        el.innerHTML = el.innerHTML.replace(
+            /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
+            String(dias)
+        );
+
+        el.dispatchEvent(new InputEvent("input",{
+            bubbles:true,
+            inputType:"insertText",
+            data:String(dias)
+        }));
+
+        el.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        return true;
+    }
+
+    // TEXTAREA / INPUT.
+    if(
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "INPUT"
+    ){
+
+        const setter = Object.getOwnPropertyDescriptor(
+            el.tagName === "TEXTAREA"
+                ? HTMLTextAreaElement.prototype
+                : HTMLInputElement.prototype,
+            "value"
+        )?.set;
+
+        if(setter){
+            setter.call(el,novoTexto);
+        }else{
+            el.value = novoTexto;
+        }
+
+        el.dispatchEvent(
+            new Event("input",{bubbles:true})
+        );
+
+        el.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        return true;
+    }
+
+    // DIV/TD/P com conteúdo editável.
+    if(
+        el.isContentEditable ||
+        el.getAttribute("contenteditable") === "true"
+    ){
+
+        el.textContent = novoTexto;
+
+        el.dispatchEvent(
+            new InputEvent("input",{
+                bubbles:true,
+                inputType:"insertText",
+                data:String(dias)
+            })
+        );
+
+        return true;
+    }
+
+    return false;
+}
+
+function encontrarEditorAtestado(){
+
+    // 1. Editores diretamente na página.
+    const elementos = [
+        ...document.querySelectorAll(
+            "textarea, [contenteditable='true'], " +
+            ".mceContentBody, .mce-content-body, " +
+            ".wysiwyg, .editor"
+        )
+    ];
+
+    for(const el of elementos){
+
+        const texto = el.innerText || el.textContent || el.value || "";
+
+        if(textoTemModeloAtestado(texto)){
+            return {
+                tipo:"direto",
+                elemento:el
+            };
+        }
+    }
+
+    // 2. TinyMCE / editor dentro de iframe.
+    const iframes = [
+        ...document.querySelectorAll("iframe")
+    ];
+
+    for(const iframe of iframes){
+
+        try{
+
+            const doc =
+                iframe.contentDocument ||
+                iframe.contentWindow?.document;
+
+            if(!doc){
+                continue;
+            }
+
+            const body = doc.body;
+
+            if(body && textoTemModeloAtestado(body.innerText || "")){
+                return {
+                    tipo:"iframe",
+                    elemento:body,
+                    iframe
+                };
+            }
+
+        }catch(e){
+            // iframe cross-origin: ignorar.
+        }
+    }
+
+    // 3. Último recurso: procurar blocos de texto visíveis.
+    const blocos = [
+        ...document.querySelectorAll("div, td, p, span")
+    ];
+
+    return blocos.find(el => {
+
+        const texto = el.innerText || "";
+
+        if(!textoTemModeloAtestado(texto)){
+            return false;
+        }
+
+        // Evita pegar um container gigantesco da página inteira.
+        return texto.length < 12000;
+
+    }) ? {
+        tipo:"bloco",
+        elemento:blocos.find(el => {
+            const texto = el.innerText || "";
+            return textoTemModeloAtestado(texto) && texto.length < 12000;
+        })
+    } : null;
+}
+
+async function preencherDiasNoDocumento(dias, timeout=12000){
+
+    const inicio = Date.now();
+
+    while(Date.now() - inicio < timeout){
+
+        const editor = encontrarEditorAtestado();
+
+        if(editor){
+
+            console.log(
+                "[CELK Helper V27] EDITOR DO ATESTADO ENCONTRADO:",
+                editor.tipo
+            );
+
+            const ok = preencherDiasNoElementoEditor(
+                editor.elemento,
+                dias
+            );
+
+            if(ok){
+
+                console.log(
+                    "[CELK Helper V27] DIAS PREENCHIDOS NO DOCUMENTO:",
+                    dias
+                );
+
+                return true;
+            }
+        }
+
+        await new Promise(r => setTimeout(r,250));
+    }
+
+    return false;
+}
+
+
+function fecharJanelasAuxiliaresAtestado(janelas){
+
+    if(!Array.isArray(janelas)){
+        return;
+    }
+
+    janelas.forEach(janela => {
+
+        try{
+
+            if(
+                janela &&
+                !janela.closed
+            ){
+
+                janela.close();
+
+                console.log(
+                    "[CELK Helper V28] Aba/janela auxiliar do Atestado fechada."
+                );
+            }
+
+        }catch(e){
+
+            console.log(
+                "[CELK Helper V28] Não foi possível fechar a janela auxiliar:",
+                e
+            );
+
+        }
+
+    });
+}
+
 async function prepararAtestado(dias, comCid){
+
+    // Guarda somente janelas/abas abertas pelo próprio fluxo do Atestado.
+    // A aba principal do CELK nunca é fechada.
+    const janelasAtestado = [];
+
+    const windowOpenOriginal = window.open;
+
+    const capturarWindowOpen = function(...args){
+
+        const janela = windowOpenOriginal.apply(this,args);
+
+        if(janela){
+            janelasAtestado.push(janela);
+
+            console.log(
+                "[CELK Helper V28] Janela auxiliar capturada."
+            );
+        }
+
+        return janela;
+    };
 
     try{
 
         console.log(
-            "[CELK Helper] Clique recebido. Preparando formulário...",
-            {dias: dias, comCid: comCid}
-        );
-
-        console.log(
-            "[CELK Helper] Iniciando Atestado:",
+            "[CELK Helper V28] INICIANDO ATESTADO:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
 
         // --------------------------------------------------
-        // 1. Se a tela oficial do atestado já estiver aberta,
-        //    usa os campos existentes.
+        // 1) O fluxo começa SEMPRE pelo botão real:
+        //    "Novo Documento".
         // --------------------------------------------------
 
-        let campoDias = localizarCampoDiasAtestado();
+        const localizarNovoDocumento = () => {
 
-        if(!campoDias){
-
-            // --------------------------------------------------
-            // 2. Primeiro tenta a conduta oficial do CELK,
-            //    como no script modelo.
-            // --------------------------------------------------
-
-            try{
-
-                const elementosConduta = [
-                    ...document.querySelectorAll(
-                        'span[data-bind*="DscConduta"], ' +
-                        '[data-bind*="DscConduta"]'
-                    )
-                ];
-
-                const elementoConduta = elementosConduta.find(el =>
-                    (el.textContent || "")
-                        .trim()
-                        .toUpperCase()
-                        .includes("ATESTADO MÉDICO")
-                    ||
-                    (el.textContent || "")
-                        .trim()
-                        .toUpperCase()
-                        .includes("ATESTADO MEDICO")
-                );
-
-                if(elementoConduta && window.ko?.contextFor){
-
-                    const contexto =
-                        window.ko.contextFor(elementoConduta);
-
-                    const root = contexto?.$root;
-
-                    const condutas =
-                        typeof root?.Condutas === "function"
-                            ? root.Condutas()
-                            : [];
-
-                    let condutaEncontrada = null;
-
-                    for(const grupo of (condutas || [])){
-
-                        const lista =
-                            typeof grupo?.ListaCondutas === "function"
-                                ? grupo.ListaCondutas()
-                                : (grupo?.ListaCondutas || []);
-
-                        for(const c of (lista || [])){
-
-                            const nome = String(
-                                typeof c?.DscConduta === "function"
-                                    ? c.DscConduta()
-                                    : c?.DscConduta || ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-                            if(
-                                nome === "ATESTADO MÉDICO" ||
-                                nome === "ATESTADO MEDICO"
-                            ){
-                                condutaEncontrada = c;
-                                break;
-                            }
-                        }
-
-                        if(condutaEncontrada) break;
-                    }
-
-                    if(
-                        condutaEncontrada &&
-                        typeof root?.CarregaCondutas === "function"
-                    ){
-
-                        const destino =
-                            typeof condutaEncontrada.CodAcaoDestino === "function"
-                                ? condutaEncontrada.CodAcaoDestino()
-                                : condutaEncontrada.CodAcaoDestino;
-
-                        console.log(
-                            "[CELK Helper] Abrindo conduta Atestado Médico:",
-                            destino
-                        );
-
-                        root.CarregaCondutas(destino);
-                    }
-                }
-
-            }catch(e){
-
-                console.warn(
-                    "[CELK Helper] falha ao abrir conduta Atestado:",
-                    e
-                );
-            }
-
-            campoDias = await esperarCampoDiasAtestado(6000);
-        }
-
-        // --------------------------------------------------
-        // 3. Se não abriu pela conduta, usa o fluxo DOCUMENTOS
-        //    que você mostrou no print.
-        // --------------------------------------------------
-
-        if(!campoDias){
-
-            console.log(
-                "[CELK Helper] Formulário oficial do Atestado não está aberto. " +
-                "Abrindo NOVO DOCUMENTO..."
-            );
-
-            const candidatosNovoDocumento = [
+            const candidatos = [
                 ...document.querySelectorAll(
-                    "button, a, input[type='button'], input[type='submit'], " +
-                    "div, span"
+                    "button, a, input, div, span"
                 )
             ];
 
-            const novoDocumento = candidatosNovoDocumento.find(el => {
+            return candidatos.find(el => {
+
+                if(el.closest("#celk-atestado-overlay")){
+                    return false;
+                }
 
                 const texto = (
                     el.innerText ||
@@ -1989,372 +2193,282 @@ async function prepararAtestado(dias, comCid){
                     return false;
                 }
 
-                const style = window.getComputedStyle(el);
-                const rect = el.getBoundingClientRect();
+                const r = el.getBoundingClientRect();
+                const s = getComputedStyle(el);
 
                 return (
-                    style.display !== "none" &&
-                    style.visibility !== "hidden" &&
-                    rect.width > 0 &&
-                    rect.height > 0
+                    r.width > 20 &&
+                    r.height > 15 &&
+                    s.display !== "none" &&
+                    s.visibility !== "hidden"
                 );
             });
+        };
 
-            console.log(
-                "[CELK Helper] Novo Documento encontrado:",
-                !!novoDocumento
-            );
+        let novo = localizarNovoDocumento();
 
-            if(novoDocumento){
+        if(!novo){
+
+            // Se ainda não estiver na aba Documentos, tenta clicar
+            // no item lateral "Documentos".
+            const documentos = [
+                ...document.querySelectorAll("a,button,div,span")
+            ].find(el => {
+
+                const txt = (
+                    el.innerText ||
+                    el.getAttribute("title") ||
+                    ""
+                )
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+                if(txt !== "DOCUMENTOS"){
+                    return false;
+                }
+
+                const r = el.getBoundingClientRect();
+
+                return r.width > 20 && r.height > 15;
+            });
+
+            if(documentos){
 
                 console.log(
-                    "[CELK Helper] Abrindo Novo Documento."
+                    "[CELK Helper V28] Abrindo aba DOCUMENTOS."
                 );
 
-                novoDocumento.click();
+                documentos.click();
+
+                await new Promise(r => setTimeout(r,700));
+
+                novo = localizarNovoDocumento();
+            }
+        }
+
+        if(!novo){
+
+            throw new Error(
+                "Não encontrei o botão NOVO DOCUMENTO. " +
+                "Verifique se a aba Documentos está aberta."
+            );
+        }
+
+        console.log(
+            "[CELK Helper V28] CLICANDO EM NOVO DOCUMENTO."
+        );
+
+        // Captura janelas/abas abertas pelo CELK durante este clique.
+        window.open = capturarWindowOpen;
+
+        try{
+            novo.click();
+        }finally{
+            window.open = windowOpenOriginal;
+        }
+
+        // --------------------------------------------------
+        // 2) Espera o modal "MODELO DE DOCUMENTO".
+        // --------------------------------------------------
+
+        const tipo = await esperarSelectModeloAtestado(12000);
+
+        if(!tipo){
+
+            throw new Error(
+                "O CELK não abriu a janela MODELO DE DOCUMENTO."
+            );
+        }
+
+        console.log(
+            "[CELK Helper V28] MODAL MODELO DE DOCUMENTO ABERTO."
+        );
+
+        // --------------------------------------------------
+        // 3) Seleciona exatamente o modelo correto.
+        // --------------------------------------------------
+
+        const opcoes = [...tipo.options];
+
+        const opcao = opcoes.find(o => {
+
+            const txt = (
+                o.textContent || ""
+            )
+            .replace(/\s+/g," ")
+            .trim()
+            .toUpperCase();
+
+            if(comCid){
+
+                return (
+                    txt.includes("ATESTADO MEDICO") &&
+                    txt.includes("COM CID") &&
+                    txt.includes("IDEAS")
+                );
 
             }else{
 
-                const tinyNovo = document.querySelector(
-                    'a.mce_newdocument[title="Novo documento"], ' +
-                    'a[title="Novo documento"], ' +
-                    'a[title="Novo Documento"]'
-                );
-
-                if(tinyNovo){
-
-                    console.log(
-                        "[CELK Helper] Abrindo Novo Documento pelo botão alternativo."
-                    );
-
-                    tinyNovo.click();
-
-                }else{
-
-                    throw new Error(
-                        "Botão 'Novo Documento' não encontrado na tela de Documentos."
-                    );
-                }
-            }
-
-            // Espera o modal de modelo.
-            const tipo = await esperarSelectModeloAtestado(8000);
-
-            if(!tipo){
-
-                throw new Error(
-                    "O CELK não abriu o seletor de Modelo de Documento."
+                return (
+                    txt === "ATESTADO MEDICO (IDEAS)" ||
+                    txt === "ATESTADO MÉDICO (IDEAS)"
                 );
             }
-
-            const alvo = comCid
-                ? [
-                    "ATESTADO MEDICO COM CID (IDEAS)",
-                    "ATESTADO MÉDICO COM CID (IDEAS)"
-                ]
-                : [
-                    "ATESTADO MEDICO (IDEAS)",
-                    "ATESTADO MÉDICO (IDEAS)"
-                ];
-
-            const opcao = [...tipo.options].find(o => {
-
-                const txt = (o.textContent || "")
-                    .replace(/\s+/g," ")
-                    .trim()
-                    .toUpperCase();
-
-                return alvo.includes(txt) ||
-                    (
-                        comCid &&
-                        txt.includes("ATESTADO MEDICO") &&
-                        txt.includes("COM CID")
-                    ) ||
-                    (
-                        !comCid &&
-                        txt === "ATESTADO MEDICO (IDEAS)"
-                    );
-            });
-
-            if(!opcao){
-
-                throw new Error(
-                    "Modelo de Atestado Médico não encontrado no CELK."
-                );
-            }
-
-            console.log(
-                "[CELK Helper] Modelo selecionado:",
-                opcao.textContent
-            );
-
-            // Seleção robusta do <select> do CELK/Wicket.
-            const setter = Object.getOwnPropertyDescriptor(
-                HTMLSelectElement.prototype,
-                "value"
-            )?.set;
-
-            if(setter){
-                setter.call(tipo, opcao.value);
-            }else{
-                tipo.value = opcao.value;
-            }
-
-            ["input","change"].forEach(tipoEvento => {
-
-                tipo.dispatchEvent(
-                    new Event(tipoEvento,{
-                        bubbles:true,
-                        cancelable:true
-                    })
-                );
-
-            });
-
-            console.log(
-                "[CELK Helper] Valor do modelo selecionado:",
-                tipo.value,
-                opcao.textContent
-            );
-
-            // --------------------------------------------------
-            // IMPORTANTE:
-            // O modal de "MODELO DE DOCUMENTO" pode exigir que
-            // o usuário confirme a escolha. Localizamos o botão
-            // DENTRO DO MESMO MODAL, não na página inteira.
-            // --------------------------------------------------
-
-            const modal = encontrarModalDoSelect(tipo);
-
-            if(modal){
-
-                const botoes = [
-                    ...modal.querySelectorAll(
-                        "button, input[type='button'], " +
-                        "input[type='submit'], a"
-                    )
-                ];
-
-                const confirmar = botoes.find(btn => {
-
-                    const txt = (
-                        btn.innerText ||
-                        btn.value ||
-                        btn.getAttribute("title") ||
-                        ""
-                    )
-                    .replace(/\s+/g," ")
-                    .trim()
-                    .toUpperCase();
-
-                    return [
-                        "OK",
-                        "CONFIRMAR",
-                        "CONTINUAR",
-                        "SELECIONAR",
-                        "CRIAR",
-                        "ABRIR",
-                        "PROSSEGUIR"
-                    ].includes(txt);
-                });
-
-                if(confirmar){
-
-                    console.log(
-                        "[CELK Helper] Confirmando modelo de documento:",
-                        confirmar.innerText || confirmar.value
-                    );
-
-                    confirmar.click();
-
-                }else{
-
-                    // Alguns modelos Wicket usam botão de imagem.
-                    const imgBotao = botoes.find(btn => {
-
-                        const title = (
-                            btn.getAttribute("title") || ""
-                        ).toUpperCase();
-
-                        const alt = (
-                            btn.getAttribute("alt") || ""
-                        ).toUpperCase();
-
-                        return (
-                            title.includes("OK") ||
-                            title.includes("CONFIRM") ||
-                            alt.includes("OK") ||
-                            alt.includes("CONFIRM")
-                        );
-                    });
-
-                    if(imgBotao){
-                        imgBotao.click();
-                    }
-                }
-            }
-
-            // Dá tempo para o CELK/Wicket montar o formulário.
-            await aguardarMudancaDaTela(12000);
-
-            campoDias = await esperarCampoDiasAtestado(5000);
-        }
-
-        // --------------------------------------------------
-        // 4. Última tentativa: localizar campos pelo texto/label,
-        //    sem depender de ID fixo.
-        // --------------------------------------------------
-
-        if(!campoDias){
-            campoDias = localizarCampoDiasAtestado();
-        }
-
-        if(!campoDias){
-
-            console.error(
-                "[CELK Helper] DOM após abertura do documento:",
-                document.body.innerText?.slice(-5000)
-            );
-
-            alert(
-                "O CELK abriu o fluxo do documento, mas o campo " +
-                "\"dias de afastamento\" não foi localizado. " +
-                "Se aparecer o modelo do atestado, me mande um print dessa tela."
-            );
-
-            return;
-        }
-
-        // --------------------------------------------------
-        // 5. Preenche dias.
-        // --------------------------------------------------
-
-        campoDias.value = String(dias);
-
-        ["input","change","blur"].forEach(tipoEvento => {
-            campoDias.dispatchEvent(
-                new Event(tipoEvento,{
-                    bubbles:true,
-                    cancelable:true
-                })
-            );
         });
 
-        // --------------------------------------------------
-        // 6. CID.
-        // --------------------------------------------------
+        if(!opcao){
 
-        const checkCid = localizarCheckboxCidAtestado();
-
-        if(checkCid){
-
-            if(checkCid.checked !== !!comCid){
-
-                checkCid.click();
-
-            }
-
-            checkCid.checked = !!comCid;
-
-            checkCid.dispatchEvent(
-                new Event("input",{bubbles:true})
+            console.log(
+                "[CELK Helper V28] OPÇÕES ENCONTRADAS:",
+                opcoes.map(o => o.textContent)
             );
 
-            checkCid.dispatchEvent(
-                new Event("change",{bubbles:true})
+            throw new Error(
+                "Não encontrei o modelo de Atestado Médico desejado."
             );
         }
 
-        const campoCid =
-            document.querySelector("#AtestadoMedico_DscCid") ||
-            localizarCampoPorLabel(/CID/i);
+        const setter = Object.getOwnPropertyDescriptor(
+            HTMLSelectElement.prototype,
+            "value"
+        )?.set;
 
-        const campoNumCid =
-            document.querySelector("#AtestadoMedico_NumCid");
-
-        if(comCid){
-
-            // Não preenche automaticamente o CID.
-            // Deixa o espaço para o médico digitar.
-            if(campoCid){
-                campoCid.value = "";
-
-                campoCid.dispatchEvent(
-                    new Event("input",{bubbles:true})
-                );
-
-                campoCid.dispatchEvent(
-                    new Event("change",{bubbles:true})
-                );
-            }
-
-            if(campoNumCid){
-                campoNumCid.value = "";
-
-                campoNumCid.dispatchEvent(
-                    new Event("input",{bubbles:true})
-                );
-
-                campoNumCid.dispatchEvent(
-                    new Event("change",{bubbles:true})
-                );
-            }
-
-            setTimeout(() => {
-                (
-                    document.querySelector("#AtestadoMedico_DscCid") ||
-                    document.querySelector("#AtestadoMedico_NumCid") ||
-                    campoCid
-                )?.focus();
-            },200);
-
+        if(setter){
+            setter.call(tipo, opcao.value);
         }else{
+            tipo.value = opcao.value;
+        }
 
-            if(campoCid){
-                campoCid.value = "";
+        tipo.dispatchEvent(
+            new Event("input",{bubbles:true})
+        );
 
-                campoCid.dispatchEvent(
-                    new Event("input",{bubbles:true})
+        tipo.dispatchEvent(
+            new Event("change",{bubbles:true})
+        );
+
+        console.log(
+            "[CELK Helper V28] MODELO SELECIONADO:",
+            opcao.textContent
+        );
+
+        // --------------------------------------------------
+        // 4) O Wicket normalmente confirma a escolha por botão.
+        //    Procuramos botões no modal.
+        // --------------------------------------------------
+
+        const modal = encontrarModalDoSelect(tipo);
+
+        if(modal){
+
+            const botoes = [
+                ...modal.querySelectorAll(
+                    "button, input[type='button'], " +
+                    "input[type='submit'], a"
+                )
+            ];
+
+            const confirmar = botoes.find(btn => {
+
+                const txt = (
+                    btn.innerText ||
+                    btn.value ||
+                    btn.getAttribute("title") ||
+                    btn.getAttribute("alt") ||
+                    ""
+                )
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+                return [
+                    "OK",
+                    "CONFIRMAR",
+                    "CONTINUAR",
+                    "SELECIONAR",
+                    "CRIAR",
+                    "ABRIR",
+                    "PROSSEGUIR"
+                ].includes(txt);
+            });
+
+            if(confirmar){
+
+                console.log(
+                    "[CELK Helper V28] CONFIRMANDO MODELO."
                 );
 
-                campoCid.dispatchEvent(
-                    new Event("change",{bubbles:true})
-                );
+                confirmar.click();
             }
+        }
 
-            if(campoNumCid){
-                campoNumCid.value = "";
+        // --------------------------------------------------
+        // 5) O documento IDEAS usa o texto do modelo.
+        //    Portanto, os dias precisam ser inseridos no EDITOR
+        //    do documento, no trecho:
+        //
+        //    necessita ____ (  ) dias de afastamento
+        // --------------------------------------------------
 
-                campoNumCid.dispatchEvent(
-                    new Event("input",{bubbles:true})
-                );
+        const preenchido = await preencherDiasNoDocumento(
+            dias,
+            15000
+        );
 
-                campoNumCid.dispatchEvent(
-                    new Event("change",{bubbles:true})
-                );
+        if(!preenchido){
+
+            throw new Error(
+                "O Atestado abriu, mas não consegui localizar " +
+                "o texto do documento para inserir a quantidade de dias."
+            );
+        }
+
+
+        // CID só é tratado depois que o documento oficial existe.
+        const checkboxCid = localizarCheckboxCidAtestado();
+
+        if(checkboxCid){
+
+            if(checkboxCid.checked !== !!comCid){
+                checkboxCid.click();
             }
         }
 
         console.log(
-            "[CELK Helper] Atestado preparado:",
+            "[CELK Helper V28] ATESTADO ABERTO E DIAS PREENCHIDOS:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
 
+        // Se o CELK tiver aberto uma aba/janela auxiliar durante
+        // a criação do documento, fecha somente essa aba.
+        // A aba principal do atendimento permanece aberta.
+        setTimeout(() => {
+            fecharJanelasAuxiliaresAtestado(janelasAtestado);
+        }, 800);
+
     }catch(e){
 
+        // Garante que o window.open original seja restaurado mesmo
+        // se houver erro no fluxo.
+        try{
+            window.open = windowOpenOriginal;
+        }catch(_){}
+
+        fecharJanelasAuxiliaresAtestado(janelasAtestado);
+
         console.error(
-            "[CELK Helper] erro ao preparar atestado:",
+            "[CELK Helper V28] ERRO NO ATESTADO:",
             e
         );
 
         alert(
-            "Erro ao abrir o Atestado Médico: " +
+            "Erro ao abrir o Atestado Médico:\n\n" +
             (e?.message || e)
         );
     }
 }
-
 
 //--------------------------------------------------
 // LOCALIZADORES DO ATESTADO
