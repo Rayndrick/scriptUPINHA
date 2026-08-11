@@ -674,39 +674,183 @@ if (topo) {
 }
 
 //--------------------------------------------------
-// GARANTIA DE PRESENÇA DO BOTÃO ATESTADO
+// GARANTIA ROBUSTA DO BOTÃO ATESTADO
 //--------------------------------------------------
+
+function criarBotaoAtestadoRobusto(){
+
+    const barraAtual = document.getElementById("celk-helper");
+
+    if(!barraAtual){
+        return false;
+    }
+
+    // Se já existe, apenas garante que esteja visível.
+    const existente = [...barraAtual.querySelectorAll("div,button,a")]
+        .find(function(el){
+
+            const txt = (el.textContent || "")
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+            return txt === "📜 ATESTADO" ||
+                   txt === "ATESTADO";
+        });
+
+    if(existente){
+
+        existente.style.setProperty(
+            "display",
+            "flex",
+            "important"
+        );
+
+        existente.style.setProperty(
+            "visibility",
+            "visible",
+            "important"
+        );
+
+        existente.style.setProperty(
+            "opacity",
+            "1",
+            "important"
+        );
+
+        existente.style.setProperty(
+            "min-width",
+            "145px",
+            "important"
+        );
+
+        existente.style.setProperty(
+            "width",
+            "145px",
+            "important"
+        );
+
+        existente.style.setProperty(
+            "flex",
+            "0 0 145px",
+            "important"
+        );
+
+        return true;
+    }
+
+    // Localiza o botão CID já renderizado.
+    const cidAtual = [...barraAtual.querySelectorAll("div,button,a")]
+        .find(function(el){
+
+            const txt = (el.textContent || "")
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+            return txt === "📋 CID" || txt === "CID";
+        });
+
+    if(!cidAtual){
+        return false;
+    }
+
+    // Cria uma cópia independente do estilo da barra.
+    const novo = document.createElement("div");
+
+    novo.id = "celk-helper-atestado";
+
+    novo.textContent = "📜 Atestado";
+
+    novo.style.cssText = `
+        display:flex !important;
+        align-items:center !important;
+        justify-content:center !important;
+
+        box-sizing:border-box !important;
+
+        width:145px !important;
+        min-width:145px !important;
+        max-width:145px !important;
+
+        flex:0 0 145px !important;
+
+        height:100% !important;
+
+        padding:0 18px !important;
+
+        font-family:Segoe UI,Arial,sans-serif !important;
+        font-size:18px !important;
+        font-weight:bold !important;
+
+        color:#222 !important;
+        background:#f8f8f8 !important;
+
+        cursor:pointer !important;
+        user-select:none !important;
+
+        border-left:1px solid #d8d8d8 !important;
+    `;
+
+    novo.onmouseenter = function(){
+        novo.style.setProperty(
+            "background",
+            "#ececec",
+            "important"
+        );
+    };
+
+    novo.onmouseleave = function(){
+        novo.style.setProperty(
+            "background",
+            "#f8f8f8",
+            "important"
+        );
+    };
+
+    novo.onclick = function(e){
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if(typeof abrirMenuAtestado === "function"){
+            abrirMenuAtestado();
+        }else{
+            console.error(
+                "[CELK Helper] função abrirMenuAtestado não encontrada."
+            );
+        }
+    };
+
+    // Insere imediatamente depois do CID.
+    cidAtual.insertAdjacentElement(
+        "afterend",
+        novo
+    );
+
+    console.log(
+        "📜 [CELK Helper] ATESTADO inserido após CID."
+    );
+
+    return true;
+}
 
 function garantirBotaoAtestado(){
 
-    const barraAtual = document.getElementById("celk-helper");
-    if(!barraAtual) return;
-
-    const painelAtual = barraAtual.querySelector(
-        'div[style*="overflow-x"]'
-    );
-
-    if(!painelAtual) return;
-
-    const btn = [...painelAtual.children].find(function(el){
-        return (el.textContent || "").trim().toUpperCase().includes("ATESTADO");
-    });
-
-    if(btn){
-        btn.style.display = "flex";
-        btn.style.visibility = "visible";
-        btn.style.opacity = "1";
-        btn.style.flex = "0 0 145px";
-        btn.style.minWidth = "145px";
+    if(criarBotaoAtestadoRobusto()){
         return;
     }
 
-    console.warn("[CELK Helper] Botão Atestado não encontrado na barra.");
+    // O CELK pode reconstruir a barra de forma assíncrona.
+    // Tenta novamente até o botão aparecer.
+    setTimeout(criarBotaoAtestadoRobusto,100);
+    setTimeout(criarBotaoAtestadoRobusto,300);
+    setTimeout(criarBotaoAtestadoRobusto,700);
+    setTimeout(criarBotaoAtestadoRobusto,1500);
+    setTimeout(criarBotaoAtestadoRobusto,3000);
 }
 
-setTimeout(garantirBotaoAtestado, 100);
-setTimeout(garantirBotaoAtestado, 500);
-setTimeout(garantirBotaoAtestado, 1500);
+garantirBotaoAtestado();
 
 const menu=document.createElement("div");
 
@@ -3498,6 +3642,10 @@ function iniciarObserver(){
             console.log("Reconstruindo barra...");
             criarInterface();
         }
+
+        // O CELK pode redesenhar a barra. Garante que o Atestado
+        // continue imediatamente após o botão CID.
+        garantirBotaoAtestado();
 
         if(
             typeof tinymce !== "undefined" &&
