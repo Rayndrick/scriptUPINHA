@@ -2074,7 +2074,6 @@ function elementoVisivel(el){
 function extrairMapaClassificacoesDaTabela(){
 
     const mapa = {};
-    const tabelas = Array.from(document.querySelectorAll("table"));
 
     function nomeNormalizado(v){
         return normalizarClassificacaoTexto(v)
@@ -2087,78 +2086,121 @@ function extrairMapaClassificacoesDaTabela(){
 
         if(!t || t.length < 5) return false;
         if(/\d/.test(t)) return false;
-        if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO)$/.test(t)) return false;
-        if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERG[ÊE]NCIA|IDOSOS|URG[ÊE]NCIA/.test(t)) return false;
+
+        if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO)$/.test(t)){
+            return false;
+        }
+
+        if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERG[ÊE]NCIA|IDOSOS|URG[ÊE]NCIA/.test(t)){
+            return false;
+        }
 
         const palavras = t.split(/\s+/).filter(Boolean);
         return palavras.length >= 2;
     }
 
-    function classeDaLinha(tr){
-        const el = tr.querySelector(
-            '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"]'
-        );
+    // Descobre a posição da coluna PACIENTE em cada tabela.
+    function descobrirIndicePaciente(tabela){
 
-        return classeParaClassificacao(el);
+        const linhasCabecalho = Array.from(
+            tabela.querySelectorAll('thead tr, tr')
+        ).slice(0,8);
+
+        for(const tr of linhasCabecalho){
+
+            const celulas = Array.from(tr.querySelectorAll('th,td'));
+
+            for(let i=0;i<celulas.length;i++){
+
+                const txt = nomeNormalizado(
+                    celulas[i].textContent || ''
+                );
+
+                if(txt === 'PACIENTE' || txt.includes('PACIENTE')){
+                    return i;
+                }
+            }
+        }
+
+        return -1;
     }
+
+    const tabelas = Array.from(document.querySelectorAll('table'));
 
     for(const tabela of tabelas){
 
-        const linhas = Array.from(tabela.querySelectorAll("tr"));
-        if(!linhas.length) continue;
-
-        let indicePaciente = -1;
-
-        // Procura o cabeçalho real da coluna Paciente.
-        for(const linha of linhas.slice(0,5)){
-            const celulas = Array.from(linha.querySelectorAll("th,td"));
-
-            celulas.forEach(function(td, index){
-                const txt = nomeNormalizado(td.textContent || "");
-
-                if(txt === "PACIENTE" || txt.includes("PACIENTE")){
-                    indicePaciente = index;
-                }
-            });
-
-            if(indicePaciente >= 0) break;
-        }
+        const indicePaciente = descobrirIndicePaciente(tabela);
+        const linhas = Array.from(tabela.querySelectorAll('tbody tr, tr'));
 
         for(const tr of linhas){
 
-            const classificacao = classeDaLinha(tr);
-            if(classificacao === "NÃO IDENTIFICADA") continue;
+            // IMPORTANTE:
+            // A classificação pertence à MESMA LINHA do paciente.
+            // Nunca usamos a primeira ball encontrada na página.
+            const bola = tr.querySelector(
+                '[class*="ball-red"],'+
+                '[class*="ball-orange"],'+
+                '[class*="ball-yellow"],'+
+                '[class*="ball-green"],'+
+                '[class*="ball-blue"]'
+            );
 
-            const celulas = Array.from(tr.querySelectorAll("td,th"));
+            if(!bola) continue;
+
+            const classificacao = classeParaClassificacao(bola);
+            if(classificacao === 'NÃO IDENTIFICADA') continue;
+
+            const celulas = Array.from(
+                tr.querySelectorAll('td,th')
+            );
+
             if(!celulas.length) continue;
 
-            let nome = "";
+            let nome = '';
 
-            // 1. Melhor opção: mesma posição da coluna Paciente.
-            if(indicePaciente >= 0 && celulas[indicePaciente]){
-                const candidato = celulas[indicePaciente].textContent || "";
+            // PRIMEIRA TENTATIVA:
+            // usa exatamente a célula correspondente ao cabeçalho PACIENTE.
+            if(
+                indicePaciente >= 0 &&
+                celulas[indicePaciente]
+            ){
+                const candidato =
+                    celulas[indicePaciente].textContent || '';
+
                 if(pareceNomePaciente(candidato)){
                     nome = candidato;
                 }
             }
 
-            // 2. Fallback: célula com nome mais provável.
+            // SEGUNDA TENTATIVA:
+            // procura uma célula text-left que tenha aparência de nome.
             if(!nome){
+
                 const candidatos = celulas
                     .map(function(td){
                         return {
-                            texto: td.textContent || "",
-                            classe: String(td.className || ""),
-                            wicket: String(td.getAttribute("wicketpath") || "")
+                            texto: td.textContent || '',
+                            classe: String(td.className || ''),
+                            wicket: String(
+                                td.getAttribute('wicketpath') || ''
+                            )
                         };
                     })
                     .filter(function(item){
                         return pareceNomePaciente(item.texto);
                     })
                     .sort(function(a,b){
-                        const aNome = /text-left/i.test(a.classe) ? 1 : 0;
-                        const bNome = /text-left/i.test(b.classe) ? 1 : 0;
-                        if(aNome !== bNome) return bNome - aNome;
+
+                        const aLeft = /text-left/i.test(a.classe) ? 1 : 0;
+                        const bLeft = /text-left/i.test(b.classe) ? 1 : 0;
+
+                        if(aLeft !== bLeft){
+                            return bLeft - aLeft;
+                        }
+
+                        // A célula do paciente normalmente não é uma
+                        // célula de classificação/prioridade e costuma
+                        // conter o nome completo.
                         return b.texto.length - a.texto.length;
                     });
 
@@ -2167,9 +2209,18 @@ function extrairMapaClassificacoesDaTabela(){
                 }
             }
 
-            if(nome){
-                mapa[nomeNormalizado(nome)] = classificacao;
-            }
+            if(!nome) continue;
+
+            nome = nomeNormalizado(nome);
+
+            mapa[nome] = classificacao;
+
+            console.log(
+                '[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA:',
+                nome,
+                '=>',
+                classificacao
+            );
         }
     }
 
