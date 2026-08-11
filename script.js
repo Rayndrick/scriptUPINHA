@@ -51,6 +51,9 @@ window.celk.init = function(){
 
     criarInterface();
 
+    // Captura a pulseira ANTES de o CELK retirar a linha da tabela.
+    instalarCapturaAntecipadaClassificacao();
+
     // Alimenta o cache quando estivermos na Consulta de Atendimentos.
     try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
 
@@ -2010,7 +2013,7 @@ function iniciarAtualizacao(){
 //--------------------------------------------------
 
 // --------------------------------------------------
-// IDENTIFICAR CLASSIFICAÇÃO DE RISCO
+// CLASSIFICAÇÃO DE RISCO — CAPTURA ROBUSTA DO CELK
 // --------------------------------------------------
 
 function normalizarClassificacaoTexto(valor){
@@ -2024,25 +2027,21 @@ function normalizarClassificacaoTexto(valor){
 }
 
 function classeParaClassificacao(elemento){
-
-    if(!elemento){
-        return "NÃO IDENTIFICADA";
-    }
+    if(!elemento) return "NÃO IDENTIFICADA";
 
     const classes = String(elemento.className || "").toLowerCase();
 
-    if(classes.includes("ball-red"))    return "VERMELHO";
-    if(classes.includes("ball-orange")) return "LARANJA";
-    if(classes.includes("ball-yellow")) return "AMARELO";
-    if(classes.includes("ball-green"))  return "VERDE";
-    if(classes.includes("ball-blue"))   return "AZUL";
+    if(/(?:^|\s)ball-red(?:\s|$)/.test(classes)) return "VERMELHO";
+    if(/(?:^|\s)ball-orange(?:\s|$)/.test(classes)) return "LARANJA";
+    if(/(?:^|\s)ball-yellow(?:\s|$)/.test(classes)) return "AMARELO";
+    if(/(?:^|\s)ball-green(?:\s|$)/.test(classes)) return "VERDE";
+    if(/(?:^|\s)ball-blue(?:\s|$)/.test(classes)) return "AZUL";
 
     const conteudo = normalizarClassificacaoTexto(
         elemento.textContent ||
         elemento.getAttribute("title") ||
         elemento.getAttribute("aria-label") ||
-        elemento.getAttribute("data-title") ||
-        ""
+        elemento.getAttribute("data-title") || ""
     );
 
     if(/VERMELHO|RED/.test(conteudo)) return "VERMELHO";
@@ -2055,481 +2054,299 @@ function classeParaClassificacao(elemento){
 }
 
 function pareceNomePaciente(texto){
-
     const t = normalizarClassificacaoTexto(texto);
+    if(!t || t.length < 5 || /\d/.test(t)) return false;
 
-    if(!t || t.length < 5) return false;
-    if(/\d/.test(t)) return false;
+    if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO|TIPO DE ATENDIMENTO|PESQUISAR|PROCURAR)$/.test(t)) return false;
+    if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERGÊNCIA|IDOSOS|URG[ÊE]NCIA/.test(t)) return false;
 
-    if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO|TIPO DE ATENDIMENTO)$/.test(t)){
-        return false;
-    }
-
-    if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERGÊNCIA|IDOSOS|URG[ÊE]NCIA/.test(t)){
-        return false;
-    }
-
-    const palavras = t.split(/\s+/).filter(Boolean);
-
+    const palavras=t.split(/\s+/).filter(Boolean);
     return palavras.length >= 2;
 }
 
-function extrairMapaClassificacoesDaTabela(){
+function nomeDaLinha(tr){
+    if(!tr) return "";
 
-    const mapa = {};
+    const celulas=Array.from(tr.querySelectorAll("td,th"));
 
-    // =========================================================
-    // FONTE REAL DO CELK
-    // =========================================================
-    // A classificação aparece na própria linha do paciente como:
-    // div.icon32.ball-red / ball-orange / ball-yellow /
-    // ball-green / ball-blue.
-    //
-    // O ponto importante é que a associação é feita pelo MESMO
-    // wicketpath de linha:
-    // form_table_table_body_rows_N
-    // =========================================================
+    // Prioridade: célula de nome do CELK normalmente é text-left.
+    const ordenadas=celulas.slice().sort((a,b)=>{
+        const sa=(/text-left/i.test(String(a.className||""))?100:0)
+                +(/cells_[23]_cell/i.test(String(a.getAttribute("wicketpath")||""))?30:0);
+        const sb=(/text-left/i.test(String(b.className||""))?100:0)
+                +(/cells_[23]_cell/i.test(String(b.getAttribute("wicketpath")||""))?30:0);
+        return sb-sa;
+    });
 
-    const bolas = Array.from(
-        document.querySelectorAll(
-            '[class*="ball-red"], ' +
-            '[class*="ball-orange"], ' +
-            '[class*="ball-yellow"], ' +
-            '[class*="ball-green"], ' +
-            '[class*="ball-blue"]'
-        )
+    for(const td of ordenadas){
+        const texto=String(td.textContent||"").trim();
+        if(pareceNomePaciente(texto)) return texto;
+    }
+
+    // Fallback: procura um bloco com várias palavras, excluindo textos do sistema.
+    for(const td of celulas){
+        const partes=String(td.innerText||td.textContent||"")
+            .split(/\n+/).map(x=>x.trim()).filter(Boolean);
+        for(const parte of partes){
+            if(pareceNomePaciente(parte)) return parte;
+        }
+    }
+
+    return "";
+}
+
+function encontrarLinhaDaBola(bola){
+    if(!bola) return null;
+
+    const tr=bola.closest("tr");
+    if(tr) return tr;
+
+    let el=bola;
+    for(let i=0;i<8 && el;i++,el=el.parentElement){
+        if(el.querySelectorAll && el.querySelectorAll("td").length>=3){
+            return el;
+        }
+    }
+
+    return null;
+}
+
+function salvarClassificacaoCache(nome,classificacao){
+    nome=normalizarClassificacaoTexto(nome);
+    if(!nome || classificacao==="NÃO IDENTIFICADA") return;
+
+    let cache={};
+    try{ cache=JSON.parse(localStorage.getItem("celk_classificacoes_cache")||"{}"); }
+    catch(_){ cache={}; }
+
+    cache[nome]=classificacao;
+    localStorage.setItem("celk_classificacoes_cache",JSON.stringify(cache));
+
+    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+}
+
+function capturarClassificacaoDaLinha(tr){
+    if(!tr) return false;
+
+    const bola=tr.querySelector(
+        '.icon32.ball-red, .icon32.ball-orange, .icon32.ball-yellow, .icon32.ball-green, .icon32.ball-blue, ' +
+        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]'
     );
 
-    for(const bola of bolas){
+    if(!bola) return false;
 
-        const classificacao = classeParaClassificacao(bola);
+    const classificacao=classeParaClassificacao(bola);
+    if(classificacao==="NÃO IDENTIFICADA") return false;
 
-        if(classificacao === "NÃO IDENTIFICADA"){
-            continue;
-        }
+    const nome=nomeDaLinha(tr);
+    if(!nome) return false;
 
-        // Sobe até o TD que contém a bolinha.
-        const tdBola = bola.closest("td");
+    salvarClassificacaoCache(nome,classificacao);
+    return true;
+}
 
-        if(!tdBola){
-            continue;
-        }
+function extrairMapaClassificacoesDaTabela(){
+    const mapa={};
 
-        const wicketBola = String(
-            tdBola.getAttribute("wicketpath") ||
-            bola.getAttribute("wicketpath") ||
-            ""
+    const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
+
+    for(const tr of linhas){
+        const bola=tr.querySelector(
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
         );
+        if(!bola) continue;
 
-        // Ex.: form_table_table_body_rows_68_cells_4_cell
-        const mLinha = wicketBola.match(
-            /form_table_table_body_rows_(\d+)_/i
-        );
+        const classificacao=classeParaClassificacao(bola);
+        const nome=nomeDaLinha(tr);
+        if(!nome || classificacao==="NÃO IDENTIFICADA") continue;
 
-        let linha = bola.closest("tr");
+        const chave=normalizarClassificacaoTexto(nome);
+        mapa[chave]=classificacao;
+        salvarClassificacaoCache(nome,classificacao);
+    }
 
-        // Primeiro tenta a própria TR.
-        // Depois usa o identificador Wicket da linha, que é mais seguro.
-        if(!linha && mLinha){
+    // Fallback para estruturas Wicket em que o tr não é encontrado diretamente.
+    if(!Object.keys(mapa).length){
+        const bolas=Array.from(document.querySelectorAll(
+            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+        ));
 
-            const numeroLinha = mLinha[1];
-
-            const candidatos = Array.from(
-                document.querySelectorAll(
-                    `[wicketpath*="form_table_table_body_rows_${numeroLinha}_"]`
-                )
-            );
-
-            if(candidatos.length){
-                linha = candidatos[0].closest("tr") || candidatos[0].parentElement;
+        for(const bola of bolas){
+            const tr=encontrarLinhaDaBola(bola);
+            if(!tr) continue;
+            const nome=nomeDaLinha(tr);
+            const classificacao=classeParaClassificacao(bola);
+            if(nome && classificacao!=="NÃO IDENTIFICADA"){
+                mapa[normalizarClassificacaoTexto(nome)]=classificacao;
+                salvarClassificacaoCache(nome,classificacao);
             }
         }
-
-        if(!linha){
-            continue;
-        }
-
-        let nome = "";
-
-        // =====================================================
-        // 1) PROCURA O NOME DENTRO DA MESMA TR
-        // =====================================================
-        const celulas = Array.from(
-            linha.querySelectorAll("td, th")
-        );
-
-        const candidatosNome = celulas
-            .map(td => ({
-                texto: td.textContent || "",
-                classe: String(td.className || ""),
-                wicket: String(td.getAttribute("wicketpath") || "")
-            }))
-            .filter(item => pareceNomePaciente(item.texto))
-            .sort((a,b) => {
-
-                const aNome =
-                    /text-left/i.test(a.classe) ||
-                    /cells_2_cell|cells_3_cell/i.test(a.wicket) ? 1 : 0;
-
-                const bNome =
-                    /text-left/i.test(b.classe) ||
-                    /cells_2_cell|cells_3_cell/i.test(b.wicket) ? 1 : 0;
-
-                if(aNome !== bNome){
-                    return bNome - aNome;
-                }
-
-                return b.texto.length - a.texto.length;
-            });
-
-        if(candidatosNome[0]){
-            nome = candidatosNome[0].texto;
-        }
-
-        // =====================================================
-        // 2) FALLBACK PELO MESMO WICKETPATH DA LINHA
-        // =====================================================
-        if(!nome && mLinha){
-
-            const numeroLinha = mLinha[1];
-
-            const elementosLinha = Array.from(
-                document.querySelectorAll(
-                    `[wicketpath*="form_table_table_body_rows_${numeroLinha}_"]`
-                )
-            );
-
-            const candidatos = elementosLinha
-                .map(el => el.textContent || "")
-                .filter(pareceNomePaciente);
-
-            if(candidatos.length){
-                nome = candidatos
-                    .sort((a,b) => b.length - a.length)[0];
-            }
-        }
-
-        if(!nome){
-            continue;
-        }
-
-        const nomeNormalizado = normalizarClassificacaoTexto(nome);
-
-        mapa[nomeNormalizado] = classificacao;
-
-        console.log(
-            "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA:",
-            nomeNormalizado,
-            "=>",
-            classificacao
-        );
     }
 
     return mapa;
 }
 
 function sincronizarClassificacoesDaTabela(){
+    return extrairMapaClassificacoesDaTabela();
+}
 
-    const mapa = extrairMapaClassificacoesDaTabela();
+// Captura ANTES da navegação. Este é o ponto principal da correção:
+// quando o usuário clica no paciente, o CELK pode remover a linha da tabela
+// imediatamente. A classificação precisa estar salva antes disso.
+function instalarCapturaAntecipadaClassificacao(){
+    if(window.celk.classificacaoClickHook) return;
+    window.celk.classificacaoClickHook=true;
 
-    if(!Object.keys(mapa).length){
-        return mapa;
+    const capturar=function(evento){
+        try{
+            const alvo=evento.target && evento.target.closest
+                ? evento.target.closest("tr")
+                : null;
+
+            if(alvo) capturarClassificacaoDaLinha(alvo);
+
+            // Também tenta todas as linhas próximas ao alvo, caso o clique
+            // tenha ocorrido em um elemento fora do TD esperado.
+            if(alvo){
+                const tabela=alvo.closest("table");
+                if(tabela){
+                    const linhas=Array.from(tabela.querySelectorAll("tr"));
+                    const idx=linhas.indexOf(alvo);
+                    if(idx>=0){
+                        for(let i=Math.max(0,idx-1);i<=Math.min(linhas.length-1,idx+1);i++){
+                            capturarClassificacaoDaLinha(linhas[i]);
+                        }
+                    }
+                }
+            }
+        }catch(_){ }
+    };
+
+    document.addEventListener("mousedown",capturar,true);
+    document.addEventListener("click",capturar,true);
+
+    // MutationObserver mantém o cache atualizado quando o CELK reconstrói a tabela.
+    if(window.MutationObserver){
+        const obs=new MutationObserver(function(){
+            if(window.celk._classificacaoScanTimer) return;
+            window.celk._classificacaoScanTimer=setTimeout(function(){
+                window.celk._classificacaoScanTimer=null;
+                try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+            },100);
+        });
+
+        obs.observe(document.body,{childList:true,subtree:true});
+        window.celk.classificacaoObserver=obs;
     }
-
-    let cache = {};
-
-    try{
-        cache = JSON.parse(
-            localStorage.getItem("celk_classificacoes_cache") || "{}"
-        );
-    }catch(_){
-        cache = {};
-    }
-
-    Object.assign(cache, mapa);
-
-    localStorage.setItem(
-        "celk_classificacoes_cache",
-        JSON.stringify(cache)
-    );
-
-    console.log(
-        "[CELK Helper V32] CLASSIFICAÇÕES SINCRONIZADAS:",
-        Object.keys(mapa).length
-    );
-
-    return mapa;
 }
 
 function obterClassificacaoDoCache(nomePaciente){
-
-    const nome = normalizarClassificacaoTexto(nomePaciente);
-
-    if(!nome){
-        return "NÃO IDENTIFICADA";
-    }
+    const nome=normalizarClassificacaoTexto(nomePaciente);
+    if(!nome) return "NÃO IDENTIFICADA";
 
     try{
-        const cache = JSON.parse(
-            localStorage.getItem("celk_classificacoes_cache") || "{}"
-        );
-
+        const cache=JSON.parse(localStorage.getItem("celk_classificacoes_cache")||"{}");
         return cache[nome] || "NÃO IDENTIFICADA";
-
     }catch(_){
         return "NÃO IDENTIFICADA";
     }
 }
 
 function obterClassificacao(nomePaciente){
+    const nome=normalizarClassificacaoTexto(nomePaciente);
+    if(!nome) return "NÃO IDENTIFICADA";
 
-    const nome = normalizarClassificacaoTexto(nomePaciente);
+    // Primeiro: linha atual.
+    const linhas=Array.from(document.querySelectorAll("table tr"));
+    for(const tr of linhas){
+        const nomeLinha=normalizarClassificacaoTexto(nomeDaLinha(tr));
+        if(!nomeLinha || nomeLinha!==nome) continue;
 
-    if(!nome){
-        return "NÃO IDENTIFICADA";
-    }
-
-    // Se estiver na Consulta de Atendimentos, atualiza o mapa.
-    sincronizarClassificacoesDaTabela();
-
-    // =========================================================
-    // 1) TENTA DIRETAMENTE NA LINHA DO PACIENTE
-    // =========================================================
-
-    const tabelas = Array.from(
-        document.querySelectorAll("table")
-    );
-
-    for(const tabela of tabelas){
-
-        const linhas = Array.from(
-            tabela.querySelectorAll("tr")
+        const bola=tr.querySelector(
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
         );
-
-        for(const tr of linhas){
-
-            const textoLinha = normalizarClassificacaoTexto(
-                tr.textContent || ""
-            );
-
-            if(!textoLinha.includes(nome)){
-                continue;
-            }
-
-            const elemento = tr.querySelector(
-                '[class*="ball-red"], ' +
-                '[class*="ball-orange"], ' +
-                '[class*="ball-yellow"], ' +
-                '[class*="ball-green"], ' +
-                '[class*="ball-blue"]'
-            );
-
-            const classificacao = classeParaClassificacao(elemento);
-
-            if(classificacao !== "NÃO IDENTIFICADA"){
-
-                console.log(
-                    "[CELK Helper V32] CLASSIFICAÇÃO DIRETA:",
-                    nomePaciente,
-                    "=>",
-                    classificacao
-                );
-
-                return classificacao;
-            }
+        const c=classeParaClassificacao(bola);
+        if(c!=="NÃO IDENTIFICADA"){
+            salvarClassificacaoCache(nome,c);
+            return c;
         }
     }
 
-    // =========================================================
-    // 2) CACHE DA CONSULTA DE ATENDIMENTOS
-    // =========================================================
+    // Segundo: cache persistente capturado antes da navegação.
+    const cache=obterClassificacaoDoCache(nome);
+    if(cache!=="NÃO IDENTIFICADA") return cache;
 
-    const doCache = obterClassificacaoDoCache(nomePaciente);
-
-    if(doCache !== "NÃO IDENTIFICADA"){
-
-        console.log(
-            "[CELK Helper V32] CLASSIFICAÇÃO PELO CACHE:",
-            nomePaciente,
-            "=>",
-            doCache
-        );
-
-        return doCache;
-    }
-
-    console.warn(
-        "[CELK Helper V32] CLASSIFICAÇÃO NÃO ENCONTRADA:",
-        nomePaciente
-    );
-
+    console.warn("[CELK Helper V32] CLASSIFICAÇÃO NÃO ENCONTRADA:",nome);
     return "NÃO IDENTIFICADA";
 }
 
 function adicionarRelatorio(nome, idade, chegada, classificacao){
+    const lista=JSON.parse(localStorage.getItem("celk_relatorio")||"[]");
 
-    const lista = JSON.parse(
-        localStorage.getItem("celk_relatorio") || "[]"
-    );
+    const existente=lista.find(p=>p.nome===nome && p.chegada===chegada);
 
-    const existente = lista.find(p =>
-        p.nome === nome &&
-        p.chegada === chegada
-    );
-
-    // ---------------------------------------------------------
-    // Se já existe, NÃO descarta a atualização.
-    // Se a classificação antiga era "NÃO IDENTIFICADA", ela será
-    // substituída assim que o ícone correto estiver disponível.
-    // ---------------------------------------------------------
     if(existente){
-
-        if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA" &&
-            (
-                !existente.classificacao ||
-                existente.classificacao === "NÃO IDENTIFICADA"
-            )
-        ){
-            existente.classificacao = classificacao;
-
-            localStorage.setItem(
-                "celk_relatorio",
-                JSON.stringify(lista)
-            );
-
-            console.log(
-                "[CELK Helper V32] CLASSIFICAÇÃO ATUALIZADA:",
-                nome,
-                classificacao
-            );
+        if(classificacao && classificacao!=="NÃO IDENTIFICADA" &&
+           (!existente.classificacao || existente.classificacao==="NÃO IDENTIFICADA")){
+            existente.classificacao=classificacao;
+            localStorage.setItem("celk_relatorio",JSON.stringify(lista));
         }
 
-        // Continua tentando caso o CELK ainda esteja montando a tabela.
-        if(!classificacao || classificacao === "NÃO IDENTIFICADA"){
-            agendarAtualizacaoClassificacaoRelatorio(
-                nome,
-                chegada
-            );
+        if(!classificacao || classificacao==="NÃO IDENTIFICADA"){
+            agendarAtualizacaoClassificacaoRelatorio(nome,chegada);
         }
-
         return;
     }
 
-    const agora = new Date();
+    const agora=new Date();
+    const atendido=agora.getHours().toString().padStart(2,"0")+":"+
+                   agora.getMinutes().toString().padStart(2,"0");
 
-    const atendido =
-        agora.getHours().toString().padStart(2,"0") +
-        ":" +
-        agora.getMinutes().toString().padStart(2,"0");
-
-    let tempo = "";
-
+    let tempo="";
     if(chegada){
-
-        const h = chegada.split(":");
-
-        const inicio = new Date();
-
-        inicio.setHours(
-            Number(h[0]),
-            Number(h[1]),
-            0,
-            0
-        );
-
-        const minutos = Math.max(
-            0,
-            Math.floor((agora - inicio)/60000)
-        );
-
-        tempo = minutos + " min";
+        const h=chegada.split(":");
+        const inicio=new Date();
+        inicio.setHours(Number(h[0]),Number(h[1]),0,0);
+        const minutos=Math.max(0,Math.floor((agora-inicio)/60000));
+        tempo=minutos+" min";
     }
 
     lista.push({
-        numero: lista.length + 1,
+        numero:lista.length+1,
         nome,
         idade,
-        classificacao: classificacao || "NÃO IDENTIFICADA",
+        classificacao:classificacao||"NÃO IDENTIFICADA",
         chegada,
         atendido,
         tempo
     });
 
-    localStorage.setItem(
-        "celk_relatorio",
-        JSON.stringify(lista)
-    );
+    localStorage.setItem("celk_relatorio",JSON.stringify(lista));
 
-    console.log(
-        "[CELK Helper V32] PACIENTE SALVO:",
-        nome,
-        "| CLASSIFICAÇÃO:",
-        classificacao
-    );
-
-    // O ícone pode aparecer depois que a evolução é aberta.
-    // Faz várias tentativas e atualiza o mesmo registro.
-    if(!classificacao || classificacao === "NÃO IDENTIFICADA"){
-        agendarAtualizacaoClassificacaoRelatorio(
-            nome,
-            chegada
-        );
+    if(!classificacao || classificacao==="NÃO IDENTIFICADA"){
+        agendarAtualizacaoClassificacaoRelatorio(nome,chegada);
     }
 }
 
-function agendarAtualizacaoClassificacaoRelatorio(nome, chegada){
-
-    const tentativas = [500, 1200, 2500, 4000, 6000];
+function agendarAtualizacaoClassificacaoRelatorio(nome,chegada){
+    const tentativas=[500,1200,2500,4000,6000];
 
     tentativas.forEach(function(delay){
-
         setTimeout(function(){
+            const classificacao=obterClassificacao(nome);
+            if(!classificacao || classificacao==="NÃO IDENTIFICADA") return;
 
-            const classificacao = obterClassificacao(nome);
+            const lista=JSON.parse(localStorage.getItem("celk_relatorio")||"[]");
+            const paciente=lista.find(p=>p.nome===nome && p.chegada===chegada);
+            if(!paciente) return;
 
-            if(
-                !classificacao ||
-                classificacao === "NÃO IDENTIFICADA"
-            ){
-                return;
+            if(paciente.classificacao!==classificacao){
+                paciente.classificacao=classificacao;
+                localStorage.setItem("celk_relatorio",JSON.stringify(lista));
+                console.log("[CELK Helper V32] CLASSIFICAÇÃO CORRIGIDA:",nome,"=>",classificacao);
             }
-
-            const lista = JSON.parse(
-                localStorage.getItem("celk_relatorio") || "[]"
-            );
-
-            const paciente = lista.find(p =>
-                p.nome === nome &&
-                p.chegada === chegada
-            );
-
-            if(!paciente){
-                return;
-            }
-
-            if(
-                paciente.classificacao === classificacao
-            ){
-                return;
-            }
-
-            paciente.classificacao = classificacao;
-
-            localStorage.setItem(
-                "celk_relatorio",
-                JSON.stringify(lista)
-            );
-
-            console.log(
-                "[CELK Helper V32] CLASSIFICAÇÃO CORRIGIDA:",
-                nome,
-                "=>",
-                classificacao
-            );
-
-        }, delay);
+        },delay);
     });
 }
 
