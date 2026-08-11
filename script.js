@@ -2023,7 +2023,14 @@ function definirConteudoEditorDeclaracao(elemento, html){
         return false;
     }
 }
+function obterMedicoLogado(){
 
+    const nome = document.querySelector(
+        'label[wicketpath="linkMinhaConta_usuarioLogado"]'
+    )?.textContent?.trim();
+
+    return nome || "MÉDICO NÃO IDENTIFICADO";
+}
 function montarDeclaracaoPaciente(dados){
 
     return `
@@ -2056,54 +2063,28 @@ function montarDeclaracaoPaciente(dados){
         </p>
 
         <p style="margin:0;">
-            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
-        </p>
+${obterMedicoLogado()}        </p>
     `;
 }
 function obterNomeMae(){
 
-    const elementos = [
-        ...document.querySelectorAll(
-            "input, textarea, select, label, span, div, td"
-        )
-    ];
+    const texto = document.body.innerText || "";
 
-    for(const el of elementos){
+    // Procura o nome da mãe quando o CELK apresentar
+    // "MÃE:" ou "NOME DA MÃE:" na tela.
+    const match = texto.match(
+        /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
+    );
 
-        const texto = (
-            el.innerText ||
-            el.textContent ||
-            el.getAttribute("title") ||
-            el.getAttribute("aria-label") ||
-            el.getAttribute("placeholder") ||
-            ""
-        )
-        .replace(/\s+/g," ")
-        .trim();
+    if(match){
+        return match[1]
+            .replace(/\s+/g," ")
+            .trim()
+            .toUpperCase();
+    }
 
-        if(!texto) continue;
-
-        // Procura textos como:
-        // MÃE: NOME DA MÃE
-        // MÃE - NOME DA MÃE
-        // MÃE NOME DA MÃE
-        const match = texto.match(
-            /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
-        );
-
-        if(match){
-
-            const nome = match[1]
-                .replace(/\s+/g," ")
-                .trim();
-
-            if(
-                nome &&
-                nome.length > 3 &&
-                !/^(REFERE|RELATA|NEGA|INFORMA|ACOMPANHA)$/i.test(nome)
-            ){
-                return nome.toUpperCase();
-            }
+    return "NÃO IDENTIFICADO";
+}
         }
     }
 
@@ -2168,8 +2149,7 @@ function montarDeclaracaoAcompanhante(dados){
         </p>
 
         <p style="margin:0;">
-            RAYNDRICK KELRYN ASSIS LIMA CRM 30235
-        </p>
+${obterMedicoLogado()}        </p>
     `;
 }
 
