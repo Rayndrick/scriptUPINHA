@@ -1,8 +1,8 @@
 // =========================================================
-// CELK HELPER — V27
+// CELK HELPER — V32
 // ATESTADO: fluxo direto pelo botão "Novo Documento"
 // =========================================================
-console.log("[CELK Helper V30] V27 CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+console.log("[CELK Helper V32] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
 
 (function () {
 
@@ -470,7 +470,7 @@ atestado.onclick=function(e){
     abrirMenuAtestado();
 };
 
-console.log("📜 [CELK Helper V30] Botão ATESTADO criado.");
+console.log("📜 [CELK Helper V32] Botão ATESTADO criado.");
 
 //--------------------------------------------------
 // BOTÃO NEWS
@@ -823,7 +823,7 @@ function criarBotaoAtestadoRobusto(){
             abrirMenuAtestado();
         }else{
             console.error(
-                "[CELK Helper V30] função abrirMenuAtestado não encontrada."
+                "[CELK Helper V32] função abrirMenuAtestado não encontrada."
             );
         }
     };
@@ -835,7 +835,7 @@ function criarBotaoAtestadoRobusto(){
     );
 
     console.log(
-        "📜 [CELK Helper V30] ATESTADO inserido após CID."
+        "📜 [CELK Helper V32] ATESTADO inserido após CID."
     );
 
     return true;
@@ -1168,7 +1168,7 @@ function preencherEvolucao(opcoes = {}){
 
         }catch(e){
             console.warn(
-                "[CELK Helper V30] erro ao localizar triagem no histórico:",
+                "[CELK Helper V32] erro ao localizar triagem no histórico:",
                 e
             );
         }
@@ -1787,7 +1787,7 @@ function abrirMenuAtestado(){
             botao.id === "celk-atestado-com-cid";
 
         console.log(
-            "[CELK Helper V30] Botão do Atestado clicado:",
+            "[CELK Helper V32] Botão do Atestado clicado:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -1806,7 +1806,7 @@ function abrirMenuAtestado(){
         }catch(err){
 
             console.error(
-                "[CELK Helper V30] erro no clique do Atestado:",
+                "[CELK Helper V32] erro no clique do Atestado:",
                 err
             );
 
@@ -2174,7 +2174,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
         if(alvos.length){
 
             console.log(
-                "[CELK Helper V30] ALVOS DO EDITOR DE ATESTADO:",
+                "[CELK Helper V32] ALVOS DO EDITOR DE ATESTADO:",
                 alvos.map(x => x.tipo)
             );
 
@@ -2191,7 +2191,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
                     if(ok){
 
                         console.log(
-                            "[CELK Helper V30] DIAS PREENCHIDOS NO DOCUMENTO:",
+                            "[CELK Helper V32] DIAS PREENCHIDOS NO DOCUMENTO:",
                             dias,
                             alvo.tipo
                         );
@@ -2240,7 +2240,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
                 }catch(err){
 
                     console.warn(
-                        "[CELK Helper V30] Falha ao preencher alvo:",
+                        "[CELK Helper V32] Falha ao preencher alvo:",
                         alvo.tipo,
                         err
                     );
@@ -2337,20 +2337,200 @@ function fecharJanelasAuxiliaresAtestado(janelas){
                 janela.close();
 
                 console.log(
-                    "[CELK Helper V30] Aba/janela auxiliar do Atestado fechada."
+                    "[CELK Helper V32] Aba/janela auxiliar do Atestado fechada."
                 );
             }
 
         }catch(e){
 
             console.log(
-                "[CELK Helper V30] Não foi possível fechar a janela auxiliar:",
+                "[CELK Helper V32] Não foi possível fechar a janela auxiliar:",
                 e
             );
 
         }
 
     });
+}
+
+
+//--------------------------------------------------
+// ATESTADO — AJUSTES FINAIS DE ASSINATURA
+//--------------------------------------------------
+
+function normalizarAtestadoTexto(s){
+    return String(s || "")
+        .replace(/\u00a0/g," ")
+        .replace(/\s+/g," ")
+        .trim()
+        .toUpperCase();
+}
+
+function aplicarLayoutAssinaturaAtestado(comCid){
+
+    const alvos = localizarAlvosEditorAtestado();
+
+    if(!alvos.length){
+        console.warn("[CELK Helper V32] Não encontrei o editor para ajustar assinatura.");
+        return false;
+    }
+
+    let aplicado = false;
+
+    alvos.forEach(alvo => {
+
+        const el = alvo.elemento;
+
+        if(!el || !el.innerHTML){
+            return;
+        }
+
+        let html = el.innerHTML;
+        const htmlOriginal = html;
+
+        // --------------------------------------------------
+        // 1) SEM CID:
+        //    remove toda a parte de autorização/assinatura do
+        //    paciente, deixando somente a assinatura médica.
+        // --------------------------------------------------
+        if(!comCid){
+
+            const blocos = [...el.querySelectorAll("p, div, li, td, section")];
+
+            const inicioPaciente = blocos.find(b => {
+                const t = normalizarAtestadoTexto(b.innerText || b.textContent);
+                return (
+                    t.startsWith("EU,") &&
+                    (
+                        t.includes("AUTORIZO A DIVULGACAO DO CID") ||
+                        t.includes("AUTORIZO A DIVULGAÇÃO DO CID")
+                    )
+                );
+            });
+
+            if(inicioPaciente){
+
+                // Remove o bloco de autorização e os blocos seguintes
+                // que correspondem à assinatura e aos dados do paciente.
+                let atual = inicioPaciente;
+                let remover = false;
+
+                const todos = [...inicioPaciente.parentElement.children];
+                const idx = todos.indexOf(inicioPaciente);
+
+                for(let i = idx; i < todos.length; i++){
+                    const no = todos[i];
+                    const texto = normalizarAtestadoTexto(
+                        no.innerText || no.textContent
+                    );
+
+                    // A partir da autorização, tudo que vem depois no
+                    // documento é a seção do paciente no modelo IDEAS.
+                    if(
+                        i === idx ||
+                        remover ||
+                        texto.includes("ASSINATURA PACIENTE") ||
+                        texto.includes("EMAIL:") ||
+                        texto.includes("TELEFONE:") ||
+                        texto.includes("ENDEREÇO:") ||
+                        texto.includes("SEDE IDEAS")
+                    ){
+                        no.remove();
+                        remover = true;
+                    }
+                }
+
+                aplicado = true;
+            }else{
+
+                // Fallback para o caso de o CELK não separar os blocos.
+                html = html.replace(
+                    /<[^>]*>\s*EU,.*?(?=<[^>]*>\s*RAYNDRICK KELRYN ASSIS LIMA\b)/is,
+                    ""
+                );
+
+                html = html.replace(
+                    /EU,.*?(?=RAYNDRICK KELRYN ASSIS LIMA\s*CRM\s*30235)/is,
+                    ""
+                );
+            }
+        }
+
+        // --------------------------------------------------
+        // 2) ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA.
+        //    Aplica nos dois modelos, COM e SEM CID.
+        // --------------------------------------------------
+
+        const espacoAssinatura =
+            '<p style="margin:0; line-height:1.2; height:120px;">&nbsp;</p>';
+
+        // Procura o bloco que contém o nome/CRM do médico e coloca
+        // um espaço grande imediatamente antes dele.
+        const blocosMedico = [...el.querySelectorAll("p, div, li, td")];
+
+        const blocoMedico = blocosMedico.find(b => {
+            const t = normalizarAtestadoTexto(b.innerText || b.textContent);
+            return (
+                t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                t.includes("CRM 30235")
+            );
+        });
+
+        if(blocoMedico){
+            const espaco = document.createElement("p");
+            espaco.style.cssText = "margin:0; line-height:1.2; height:120px;";
+            espaco.innerHTML = "&nbsp;";
+            blocoMedico.parentNode.insertBefore(espaco, blocoMedico);
+            aplicado = true;
+        }else{
+            // Fallback caso o nome esteja em HTML sem bloco identificável.
+            html = html.replace(
+                /(RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA\s+CRM\s*30235)/i,
+                espacoAssinatura + "$1"
+            );
+        }
+
+        if(html !== htmlOriginal){
+            el.innerHTML = html;
+            aplicado = true;
+        }
+
+        // Sincroniza com TinyMCE/Wicket quando existir.
+        try{
+            if(typeof tinymce !== "undefined" && tinymce?.editors?.length){
+                tinymce.editors.forEach(editor => {
+                    try{
+                        const body = editor.getBody?.();
+                        if(
+                            body &&
+                            (
+                                body === el ||
+                                body.contains?.(el) ||
+                                el.contains?.(body)
+                            )
+                        ){
+                            editor.setContent(body.innerHTML);
+                            editor.fire("input");
+                            editor.fire("change");
+                        }
+                    }catch(_){ }
+                });
+            }
+        }catch(_){ }
+
+        try{
+            el.dispatchEvent(new Event("input", {bubbles:true}));
+            el.dispatchEvent(new Event("change", {bubbles:true}));
+        }catch(_){ }
+    });
+
+    console.log(
+        "[CELK Helper V32] Layout do Atestado ajustado:",
+        comCid ? "COM CID" : "SEM CID",
+        aplicado ? "OK" : "NÃO APLICADO"
+    );
+
+    return aplicado;
 }
 
 async function prepararAtestado(dias, comCid){
@@ -2375,7 +2555,7 @@ async function prepararAtestado(dias, comCid){
             janelasAtestado.push(janela);
 
             console.log(
-                "[CELK Helper V30] Janela auxiliar capturada."
+                "[CELK Helper V32] Janela auxiliar capturada."
             );
         }
 
@@ -2385,7 +2565,7 @@ async function prepararAtestado(dias, comCid){
     try{
 
         console.log(
-            "[CELK Helper V30] INICIANDO ATESTADO:",
+            "[CELK Helper V32] INICIANDO ATESTADO:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2467,7 +2647,7 @@ async function prepararAtestado(dias, comCid){
             if(documentos){
 
                 console.log(
-                    "[CELK Helper V30] Abrindo aba DOCUMENTOS."
+                    "[CELK Helper V32] Abrindo aba DOCUMENTOS."
                 );
 
                 documentos.click();
@@ -2487,7 +2667,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V30] CLICANDO EM NOVO DOCUMENTO."
+            "[CELK Helper V32] CLICANDO EM NOVO DOCUMENTO."
         );
 
         // Captura janelas/abas abertas pelo CELK durante este clique.
@@ -2513,7 +2693,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V30] MODAL MODELO DE DOCUMENTO ABERTO."
+            "[CELK Helper V32] MODAL MODELO DE DOCUMENTO ABERTO."
         );
 
         // --------------------------------------------------
@@ -2522,14 +2702,25 @@ async function prepararAtestado(dias, comCid){
 
         const opcoes = [...tipo.options];
 
-        const opcao = opcoes.find(o => {
-
-            const txt = (
-                o.textContent || ""
-            )
-            .replace(/\s+/g," ")
+        // Normaliza acentos, espaços e caracteres invisíveis.
+        // Isso evita que o CELK deixe de reconhecer o modelo SEM CID
+        // por diferenças de formatação do texto da <option>.
+        const normalizarModelo = (valor) => String(valor || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .replace(/\s+/g, " ")
             .trim()
             .toUpperCase();
+
+        console.log(
+            "[CELK Helper V32] OPÇÕES DO MODELO:",
+            opcoes.map(o => ({ texto: o.textContent, valor: o.value }))
+        );
+
+        const opcao = opcoes.find(o => {
+
+            const txt = normalizarModelo(o.textContent);
 
             if(comCid){
 
@@ -2541,9 +2732,9 @@ async function prepararAtestado(dias, comCid){
 
             }else{
 
-                // O modelo SEM CID pode aparecer no CELK com pequenas
-                // diferenças de espaços/acentuação. O importante é:
-                // ATESTADO MÉDICO + IDEAS e NÃO conter "COM CID".
+                // SEM CID = ATESTADO MEDICO + IDEAS, mas SEM "COM CID".
+                // A opção do seu CELK aparece como:
+                // ATESTADO MEDICO ( IDEAS )
                 return (
                     txt.includes("ATESTADO MEDICO") &&
                     txt.includes("IDEAS") &&
@@ -2554,13 +2745,15 @@ async function prepararAtestado(dias, comCid){
 
         if(!opcao){
 
-            console.log(
-                "[CELK Helper V31] OPÇÕES ENCONTRADAS:",
-                opcoes.map(o => o.textContent)
+            console.error(
+                "[CELK Helper V32] MODELO NÃO ENCONTRADO. OPÇÕES:",
+                opcoes.map(o => ({ texto: o.textContent, valor: o.value }))
             );
 
             throw new Error(
-                "Não encontrei o modelo de Atestado Médico desejado."
+                comCid
+                    ? "Não encontrei o modelo ATESTADO MEDICO COM CID ( IDEAS )."
+                    : "Não encontrei o modelo ATESTADO MEDICO ( IDEAS )."
             );
         }
 
@@ -2584,7 +2777,7 @@ async function prepararAtestado(dias, comCid){
         );
 
         console.log(
-            "[CELK Helper V31] MODELO SELECIONADO:",
+            "[CELK Helper V32] MODELO SELECIONADO:",
             opcao.textContent
         );
 
@@ -2631,7 +2824,7 @@ async function prepararAtestado(dias, comCid){
             if(confirmar){
 
                 console.log(
-                    "[CELK Helper V30] CONFIRMANDO MODELO."
+                    "[CELK Helper V32] CONFIRMANDO MODELO."
                 );
 
                 confirmar.click();
@@ -2670,8 +2863,15 @@ async function prepararAtestado(dias, comCid){
             }
         }
 
+        // Ajusta o documento depois que o modelo oficial foi aberto:
+        // SEM CID remove a seção de assinatura/autorização do paciente;
+        // COM CID mantém essa seção. Nos dois modelos é reservado um
+        // espaço maior para carimbo e assinatura médica.
+        await new Promise(r => setTimeout(r, 250));
+        aplicarLayoutAssinaturaAtestado(comCid);
+
         console.log(
-            "[CELK Helper V30] ATESTADO ABERTO E DIAS PREENCHIDOS:",
+            "[CELK Helper V32] ATESTADO ABERTO, DIAS E ASSINATURA AJUSTADOS:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -2699,7 +2899,7 @@ async function prepararAtestado(dias, comCid){
         }catch(_){}
 
         console.error(
-            "[CELK Helper V30] ERRO NO ATESTADO:",
+            "[CELK Helper V32] ERRO NO ATESTADO:",
             e
         );
 
@@ -2764,7 +2964,7 @@ function localizarCampoDiasAtestado(){
 
         if(campo){
             console.log(
-                "[CELK Helper V30] Campo OFICIAL de dias localizado:",
+                "[CELK Helper V32] Campo OFICIAL de dias localizado:",
                 campo.id || campo.name
             );
             return campo;
