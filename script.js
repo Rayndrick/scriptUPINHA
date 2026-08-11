@@ -967,20 +967,13 @@ function preencherEvolucao(opcoes = {}){
     const cmb = "NEGA";
 
     // ------------------------------
-    // SSVV
+    // PARÂMETROS / SSVV
     // ------------------------------
-    const ssvv = [
-        `PA: ${pa}`,
-        `FC: ${fc}`,
-        `TAX: ${temp}`,
-        `SAT: ${sat}`,
-        `FR: ${fr}`,
-        `DX: ${dx}`
-    ].join(" - ");
-
-    // Peso aparece em TODOS os modos. Se não for encontrado,
-    // permanece explicitamente como NT.
-    const pesoLinha = `# PESO: ${peso} kg`;
+    // Mantém os parâmetros separados, como no modelo anterior.
+    // O PESO segue exatamente o mesmo padrão dos demais parâmetros.
+    // A queixa da TRIAGEM NÃO substitui nem mistura os parâmetros.
+    const parametros =
+        `# PESO: ${peso} kg | FC: ${fc} | FR: ${fr} | PA: ${pa} | SAT: ${sat} | TEMP: ${temp}°C | DX: ${dx}`;
 
     // ------------------------------
     // EXAMES FÍSICOS
@@ -1026,9 +1019,7 @@ function preencherEvolucao(opcoes = {}){
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
 
-${pesoLinha}
-
-# SSVV: ${ssvv}
+${parametros}
 
 ${exameAtendimento}
 
@@ -1046,9 +1037,7 @@ ${exameAtendimento}
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
 
-${pesoLinha}
-
-# SSVV: ${ssvv}
+${parametros}
 
 ${examePed}
 
@@ -1067,9 +1056,7 @@ ${examePed}
 # CMB: ${cmb}
 # ALERGIAS: ${alergia}
 
-${pesoLinha}
-
-# SSVV: ${ssvv}
+${parametros}
 
 ${exameClin}
 
