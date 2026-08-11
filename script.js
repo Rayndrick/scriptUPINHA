@@ -2541,9 +2541,13 @@ async function prepararAtestado(dias, comCid){
 
             }else{
 
+                // O modelo SEM CID pode aparecer no CELK com pequenas
+                // diferenças de espaços/acentuação. O importante é:
+                // ATESTADO MÉDICO + IDEAS e NÃO conter "COM CID".
                 return (
-                    txt === "ATESTADO MEDICO (IDEAS)" ||
-                    txt === "ATESTADO MÉDICO (IDEAS)"
+                    txt.includes("ATESTADO MEDICO") &&
+                    txt.includes("IDEAS") &&
+                    !txt.includes("COM CID")
                 );
             }
         });
@@ -2551,7 +2555,7 @@ async function prepararAtestado(dias, comCid){
         if(!opcao){
 
             console.log(
-                "[CELK Helper V30] OPÇÕES ENCONTRADAS:",
+                "[CELK Helper V31] OPÇÕES ENCONTRADAS:",
                 opcoes.map(o => o.textContent)
             );
 
@@ -2580,7 +2584,7 @@ async function prepararAtestado(dias, comCid){
         );
 
         console.log(
-            "[CELK Helper V30] MODELO SELECIONADO:",
+            "[CELK Helper V31] MODELO SELECIONADO:",
             opcao.textContent
         );
 
