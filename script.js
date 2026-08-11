@@ -1728,19 +1728,6 @@ function abrirMenuAtestado(){
             </button>
         </div>
 
-        <button id="celk-atestado-cancelar"
-            style="
-                width:100%;
-                margin-top:12px;
-                padding:9px;
-                border:1px solid #ccc;
-                border-radius:5px;
-                background:#fff;
-                cursor:pointer;
-            ">
-            Cancelar
-        </button>
-
         <div style="
             margin-top:12px;
             font-size:12px;
@@ -1764,10 +1751,7 @@ function abrirMenuAtestado(){
             fechar();
         }
     });
-
-    document.getElementById("celk-atestado-cancelar").onclick = fechar;
-
-    // Usa delegação no próprio overlay para evitar que o CELK
+// Usa delegação no próprio overlay para evitar que o CELK
     // intercepte/reconstrua os handlers dos botões.
     overlay.addEventListener("click", async function(e){
 
@@ -2064,9 +2048,18 @@ async function prepararAtestado(dias, comCid){
                 opcao.textContent
             );
 
-            tipo.value = opcao.value;
+            // Seleção robusta do <select> do CELK/Wicket.
+            const setter = Object.getOwnPropertyDescriptor(
+                HTMLSelectElement.prototype,
+                "value"
+            )?.set;
 
-            // Eventos nativos.
+            if(setter){
+                setter.call(tipo, opcao.value);
+            }else{
+                tipo.value = opcao.value;
+            }
+
             ["input","change"].forEach(tipoEvento => {
 
                 tipo.dispatchEvent(
@@ -2077,6 +2070,12 @@ async function prepararAtestado(dias, comCid){
                 );
 
             });
+
+            console.log(
+                "[CELK Helper] Valor do modelo selecionado:",
+                tipo.value,
+                opcao.textContent
+            );
 
             // --------------------------------------------------
             // IMPORTANTE:
@@ -2323,23 +2322,35 @@ async function prepararAtestado(dias, comCid){
 
 function localizarCampoDiasAtestado(){
 
-    // ID conhecido do modelo antigo.
+    // NUNCA considerar o campo do nosso próprio modal.
+    // Esse era o motivo de o fluxo parar antes de abrir o documento oficial.
+    const ignorar = document.querySelector("#celk-atestado-dias");
+
+    // ID conhecido do formulário OFICIAL do CELK.
     const direto = document.querySelector(
         "#AtestadoMedico_NumeroDias.form-input, " +
         "#AtestadoMedico_NumeroDias"
     );
 
-    if(direto){
+    if(direto && direto !== ignorar){
         return direto;
     }
 
-    // Fallback: inputs numéricos cujo nome/id/placeholder
-    // indique dias de afastamento.
+    // Fallback: somente campos fora do modal do Helper.
     const inputs = [
-        ...document.querySelectorAll(
-            "input, textarea"
-        )
-    ];
+        ...document.querySelectorAll("input, textarea")
+    ].filter(el => {
+
+        if(el === ignorar){
+            return false;
+        }
+
+        if(el.closest("#celk-atestado-overlay")){
+            return false;
+        }
+
+        return true;
+    });
 
     return inputs.find(el => {
 
@@ -2357,10 +2368,12 @@ function localizarCampoDiasAtestado(){
         return (
             atributos.includes("NUMERODIAS") ||
             atributos.includes("NUMERO_DIAS") ||
-            atributos.includes("DIAS") &&
             (
-                atributos.includes("ATEST") ||
-                atributos.includes("AFAST")
+                atributos.includes("DIAS") &&
+                (
+                    atributos.includes("ATEST") ||
+                    atributos.includes("AFAST")
+                )
             )
         );
 
