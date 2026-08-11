@@ -1547,24 +1547,36 @@ function obterClassificacao(){
     // ball-red    = VERMELHO
 
     const elementos = Array.from(
-        document.querySelectorAll('div.icon32[class*="ball-"]')
+        document.querySelectorAll(
+            'div.icon32[class*="ball-"], ' +
+            'div[class*="icon32"][class*="ball-"], ' +
+            '[class*="ball-red"], [class*="ball-orange"], ' +
+            '[class*="ball-yellow"], [class*="ball-green"], ' +
+            '[class*="ball-blue"]'
+        )
     );
 
-    // Prioriza o elemento visível.
+    // Prioriza o elemento visível e com dimensão real.
     const elemento = elementos.find(el => {
+
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
-        return style.display !== "none" &&
-               style.visibility !== "hidden" &&
-               rect.width > 0 &&
-               rect.height > 0;
+
+        return (
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0
+        );
+
     }) || elementos[0];
 
     if(!elemento){
         return "NÃO IDENTIFICADA";
     }
 
-    const classes = (elemento.className || "").toLowerCase();
+    const classes = String(elemento.className || "")
+        .toLowerCase();
 
     if(classes.includes("ball-red")){
         return "VERMELHO";
@@ -1586,12 +1598,11 @@ function obterClassificacao(){
         return "AZUL";
     }
 
-    // Fallback: caso o CELK altere a classe, tenta identificar
-    // pelo texto/atributo do próprio elemento.
     const conteudo = (
         elemento.textContent ||
         elemento.getAttribute("title") ||
         elemento.getAttribute("aria-label") ||
+        elemento.getAttribute("data-title") ||
         ""
     ).trim().toUpperCase();
 
@@ -1621,13 +1632,40 @@ function obterClassificacao(){
 
 function adicionarRelatorio(nome, idade, chegada, classificacao){
 
-    const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
+    const lista = JSON.parse(
+        localStorage.getItem("celk_relatorio") || "[]"
+    );
 
-    // evita duplicar
-    if(lista.some(p =>
+    // Se o paciente já estiver no relatório, não duplica.
+    // Porém, se a classificação anterior ficou como NÃO IDENTIFICADA,
+    // atualiza quando a classificação correta estiver disponível.
+    const existente = lista.find(p =>
         p.nome === nome &&
         p.chegada === chegada
-    )){
+    );
+
+    if(existente){
+
+        if(
+            classificacao &&
+            classificacao !== "NÃO IDENTIFICADA" &&
+            (!existente.classificacao ||
+             existente.classificacao === "NÃO IDENTIFICADA")
+        ){
+            existente.classificacao = classificacao;
+
+            localStorage.setItem(
+                "celk_relatorio",
+                JSON.stringify(lista)
+            );
+
+            console.log(
+                "[CELK Helper V32] Classificação atualizada:",
+                nome,
+                classificacao
+            );
+        }
+
         return;
     }
 
@@ -1662,31 +1700,69 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
     }
 
     lista.push({
-
-    numero: lista.length + 1,
-
-    nome,
-
-    idade,
-
-    classificacao,
-
-    chegada,
-
-    atendido,
-
-    tempo
-
-});
+        numero: lista.length + 1,
+        nome,
+        idade,
+        classificacao,
+        chegada,
+        atendido,
+        tempo
+    });
 
     localStorage.setItem(
         "celk_relatorio",
         JSON.stringify(lista)
     );
 
-    console.log("Paciente salvo:", nome);
+    console.log(
+        "Paciente salvo:",
+        nome,
+        "| Classificação:",
+        classificacao
+    );
 
+    // O ícone de classificação pode aparecer alguns milissegundos
+    // depois da montagem da evolução. Tenta novamente sem duplicar.
+    if(classificacao === "NÃO IDENTIFICADA"){
+
+        setTimeout(() => {
+
+            const novaClassificacao = obterClassificacao();
+
+            if(
+                novaClassificacao &&
+                novaClassificacao !== "NÃO IDENTIFICADA"
+            ){
+
+                const atualizada = JSON.parse(
+                    localStorage.getItem("celk_relatorio") || "[]"
+                );
+
+                const item = atualizada.find(p =>
+                    p.nome === nome &&
+                    p.chegada === chegada
+                );
+
+                if(item){
+                    item.classificacao = novaClassificacao;
+
+                    localStorage.setItem(
+                        "celk_relatorio",
+                        JSON.stringify(atualizada)
+                    );
+
+                    console.log(
+                        "[CELK Helper V32] Classificação recuperada após espera:",
+                        nome,
+                        novaClassificacao
+                    );
+                }
+            }
+
+        }, 1200);
+    }
 }
+
 
 //--------------------------------------------------
 // DECLARAÇÕES — MENU E PREENCHIMENTO
@@ -1706,7 +1782,10 @@ function obterDadosPacienteDeclaracao(){
 
     const tela = document.body.innerText || "";
 
-    // Mesmo padrão já usado no Helper para o cabeçalho do paciente.
+    // ==================================================
+    // PACIENTE
+    // ==================================================
+
     const cabecalho = tela.match(
         /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
     );
@@ -1719,23 +1798,42 @@ function obterDadosPacienteDeclaracao(){
         ? cabecalho[2].trim()
         : "";
 
-    // Para a declaração, usar somente a idade em anos.
-    const idadeMatch = idadeTexto.match(/(\d+)\s*anos?/i);
-    const idade = idadeMatch ? idadeMatch[1] : idadeTexto;
-
-    // Horário de chegada: prioriza a triagem.
-    let chegada = "";
-
-    const mTriagem = tela.match(
-        /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+    const idadeMatch = idadeTexto.match(
+        /(\d+)\s*anos?/i
     );
 
-    if(mTriagem){
-        chegada = mTriagem[1];
+    const idade = idadeMatch
+        ? idadeMatch[1]
+        : idadeTexto;
+
+    // ==================================================
+    // HORÁRIO DE CHEGADA
+    // PRIMEIRA FONTE = RELATÓRIO
+    // ==================================================
+
+    let chegada = obterChegadaDoRelatorio(nome);
+
+    // ==================================================
+    // FALLBACK 1 — TRIAGEM
+    // ==================================================
+
+    if(!chegada){
+
+        const mTriagem = tela.match(
+            /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+        );
+
+        if(mTriagem){
+            chegada = mTriagem[1];
+        }
     }
 
-    // Fallbacks caso o texto da triagem esteja em outro formato.
+    // ==================================================
+    // FALLBACK 2 — CHEGADA / ENTRADA
+    // ==================================================
+
     if(!chegada){
+
         const mChegada = tela.match(
             /(?:CHEGADA|ENTRADA)[^\d]{0,40}(\d{2}:\d{2})/i
         );
@@ -1748,6 +1846,10 @@ function obterDadosPacienteDeclaracao(){
     if(!chegada){
         chegada = "NÃO IDENTIFICADO";
     }
+
+    // ==================================================
+    // DATA E SAÍDA
+    // ==================================================
 
     const agora = new Date();
 
@@ -1763,14 +1865,20 @@ function obterDadosPacienteDeclaracao(){
         hourCycle:"h23"
     });
 
- return {
-    nome,
-    idade,
-    chegada,
-    saida,
-    data,
-    nomeMae: obterNomeMae()
-};
+    return {
+
+        nome,
+        idade,
+        chegada,
+        saida,
+        data,
+
+        // Tenta primeiro na página.
+        // O modelo padrão do CELK será lido depois
+        // que a declaração for aberta.
+        nomeMae: obterNomeMae()
+
+    };
 }
 
 function localizarNovoDocumentoDeclaracao(){
@@ -2062,67 +2170,383 @@ function montarDeclaracaoPaciente(dados){
 }
 function obterNomeMae(){
 
-    const elementos = [
-        ...document.querySelectorAll(
-            "input, textarea, select, label, span, div, td"
-        )
+    const texto = document.body.innerText || "";
+
+    // ==================================================
+    // 1. TENTA PELO TEXTO NORMAL DA PÁGINA
+    // ==================================================
+
+    const padroes = [
+
+        /(?:NOME\s+DA\s+M[AÃ]E|NOME\s+DA\s+MAE)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,}?)(?=\s*(?:\n|$))/i,
+
+        /(?:M[AÃ]E|MAE)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,}?)(?=\s*(?:\n|$))/i,
+
+        /RESPONS[AÁ]VEL\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,}?)(?=\s*(?:\n|$))/i
+
     ];
 
-    for(const el of elementos){
+    for(const regex of padroes){
 
-        const texto = (
-            el.innerText ||
-            el.textContent ||
-            el.getAttribute("title") ||
-            el.getAttribute("aria-label") ||
-            el.getAttribute("placeholder") ||
-            ""
-        )
-        .replace(/\s+/g," ")
-        .trim();
-
-        if(!texto) continue;
-
-        // Procura textos como:
-        // MÃE: NOME DA MÃE
-        // MÃE - NOME DA MÃE
-        // MÃE NOME DA MÃE
-        const match = texto.match(
-            /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
-        );
+        const match = texto.match(regex);
 
         if(match){
 
             const nome = match[1]
                 .replace(/\s+/g," ")
-                .trim();
+                .trim()
+                .toUpperCase();
 
-            if(
-                nome &&
-                nome.length > 3 &&
-                !/^(REFERE|RELATA|NEGA|INFORMA|ACOMPANHA)$/i.test(nome)
-            ){
-                return nome.toUpperCase();
+            if(nome && nome.length >= 4){
+                return nome;
             }
         }
     }
 
-    // Procura no texto geral da página
-    const tela = document.body.innerText || "";
+    // ==================================================
+    // 2. TENTA PELO MODELO PADRÃO DO CELK
+    //
+    // Exemplo real do CELK:
+    // "Declaro para os devidos fins, que o Sr. (a)
+    // VANUZIA NASCIMENTO DA SILVA esteve na Unidade..."
+    // ==================================================
 
-    const matchTela = tela.match(
-        /(?:NOME\s+DA\s+M[AÃ]E|M[AÃ]E)\s*[:\-]\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,})/i
-    );
+    const encontrarNoTexto = function(txt){
 
-    if(matchTela){
-        return matchTela[1]
+        if(!txt){
+            return "";
+        }
+
+        const textoNormalizado = String(txt)
             .replace(/\s+/g," ")
-            .trim()
-            .toUpperCase();
-    }
+            .trim();
+
+        const padroesModelo = [
+
+            /que\s+o\s+Sr\.?\s*\(?a?\)?\s+([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,}?)\s+esteve\s+na\s+Unidade/i,
+
+            /que\s+o\s+Sr\.?\s*\(?a?\)?\s+([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{3,}?)\s+esteve/i,
+
+            /Sr\.?\s*\(?a?\)?\s+([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÊÍÓÔÕÚÇ ]{3,}?)\s+esteve/i
+
+        ];
+
+        for(const regex of padroesModelo){
+
+            const match = textoNormalizado.match(regex);
+
+            if(match){
+
+                const nome = match[1]
+                    .replace(/\s+/g," ")
+                    .trim()
+                    .toUpperCase();
+
+                if(nome && nome.length >= 4){
+                    return nome;
+                }
+            }
+        }
+
+        return "";
+    };
+
+    // Editores TinyMCE
+    try{
+
+        if(typeof tinymce !== "undefined" && tinymce?.editors?.length){
+
+            for(const editor of tinymce.editors){
+
+                try{
+
+                    const body = editor.getBody?.();
+
+                    if(body){
+
+                        const nome = encontrarNoTexto(
+                            body.innerText || body.textContent
+                        );
+
+                        if(nome){
+                            return nome;
+                        }
+                    }
+
+                }catch(_){}
+            }
+        }
+
+    }catch(_){}
+
+    // Iframes / editor do CELK
+    try{
+
+        const iframes = document.querySelectorAll("iframe");
+
+        for(const iframe of iframes){
+
+            try{
+
+                const doc =
+                    iframe.contentDocument ||
+                    iframe.contentWindow?.document;
+
+                if(!doc?.body){
+                    continue;
+                }
+
+                const nome = encontrarNoTexto(
+                    doc.body.innerText || doc.body.textContent
+                );
+
+                if(nome){
+                    return nome;
+                }
+
+            }catch(_){}
+        }
+
+    }catch(_){}
 
     return "NÃO IDENTIFICADO";
 }
+    
+function obterChegadaDoRelatorio(nomePaciente){
+
+    // ==================================================
+    // 1. PRIMEIRA FONTE — RELATÓRIO SALVO NO LOCALSTORAGE
+    // ==================================================
+    try{
+
+        const lista =
+            JSON.parse(
+                localStorage.getItem("celk_relatorio") || "[]"
+            );
+
+        if(Array.isArray(lista)){
+
+            const nomeNormalizado = String(nomePaciente || "")
+                .replace(/\s+/g," ")
+                .trim()
+                .toUpperCase();
+
+            const paciente = lista.find(p => {
+
+                const nomeRelatorio = String(p.nome || "")
+                    .replace(/\s+/g," ")
+                    .trim()
+                    .toUpperCase();
+
+                return nomeRelatorio === nomeNormalizado;
+            });
+
+            if(paciente?.chegada){
+                console.log(
+                    "[CELK Helper V32] Chegada encontrada no relatório:",
+                    paciente.chegada
+                );
+                return paciente.chegada;
+            }
+
+            const pacienteParcial = lista.find(p => {
+
+                const nomeRelatorio = String(p.nome || "")
+                    .replace(/\s+/g," ")
+                    .trim()
+                    .toUpperCase();
+
+                return (
+                    nomeRelatorio.includes(nomeNormalizado) ||
+                    nomeNormalizado.includes(nomeRelatorio)
+                );
+            });
+
+            if(pacienteParcial?.chegada){
+                console.log(
+                    "[CELK Helper V32] Chegada encontrada por nome parcial:",
+                    pacienteParcial.chegada
+                );
+                return pacienteParcial.chegada;
+            }
+        }
+
+    }catch(e){
+
+        console.warn(
+            "[CELK Helper V32] Erro lendo chegada do relatório:",
+            e
+        );
+
+    }
+
+    // ==================================================
+    // 2. SEGUNDA FONTE — HISTÓRICO DE TRIAGEM DO CELK
+    // ==================================================
+    // O horário de chegada normalmente está no cartão
+    // "UP1 - TRIAGEM COM CLASSIFICAÇÃO DE RISCO".
+    // Não dependemos mais de document.body.innerText conter
+    // a palavra "TRIAGEM" em uma posição específica.
+    try{
+
+        const blocos = Array.from(
+            document.querySelectorAll(
+                '[wicketpath*="repeaterAtendimentosProntuario"]'
+            )
+        );
+
+        // Primeiro procura um bloco explicitamente identificado
+        // como triagem.
+        for(const bloco of blocos){
+
+            const textoBloco = (
+                bloco.innerText ||
+                bloco.textContent ||
+                ""
+            )
+                .replace(/\s+/g," ")
+                .trim();
+
+            const normalizado = textoBloco.toUpperCase();
+
+            if(
+                normalizado.includes("TRIAGEM COM CLASSIFICAÇÃO DE RISCO") ||
+                normalizado.includes("TRIAGEM COM CLASSIFICACAO DE RISCO") ||
+                normalizado.includes("TRIAGEM")
+            ){
+
+                // Prioridade: data + horário no mesmo trecho.
+                const dataHora = textoBloco.match(
+                    /\b\d{2}\/\d{2}\/\d{4}\s*(?:-|–|—|às|as)?\s*([01]\d|2[0-3]):[0-5]\d\b/i
+                );
+
+                if(dataHora){
+                    const horario = dataHora[0].match(
+                        /\b([01]\d|2[0-3]):[0-5]\d\b/
+                    )?.[0];
+
+                    if(horario){
+                        console.log(
+                            "[CELK Helper V32] Chegada encontrada na triagem (data/hora):",
+                            horario,
+                            textoBloco
+                        );
+                        return horario;
+                    }
+                }
+
+                // Fallback: qualquer horário dentro do cartão de triagem.
+                const horarios = textoBloco.match(
+                    /\b(?:[01]\d|2[0-3]):[0-5]\d\b/g
+                );
+
+                if(horarios && horarios.length){
+                    console.log(
+                        "[CELK Helper V32] Chegada encontrada no cartão de triagem:",
+                        horarios[0],
+                        textoBloco
+                    );
+                    return horarios[0];
+                }
+
+                // Alguns elementos podem guardar o horário em
+                // title / aria-label / value.
+                const elementos = [
+                    bloco,
+                    ...bloco.querySelectorAll("[title],[aria-label],[value]")
+                ];
+
+                for(const el of elementos){
+
+                    const atributos = [
+                        el.getAttribute?.("title"),
+                        el.getAttribute?.("aria-label"),
+                        el.getAttribute?.("value")
+                    ]
+                        .filter(Boolean)
+                        .join(" ");
+
+                    const horarioAtributo = atributos.match(
+                        /\b(?:[01]\d|2[0-3]):[0-5]\d\b/
+                    )?.[0];
+
+                    if(horarioAtributo){
+                        console.log(
+                            "[CELK Helper V32] Chegada encontrada em atributo da triagem:",
+                            horarioAtributo
+                        );
+                        return horarioAtributo;
+                    }
+                }
+            }
+        }
+
+    }catch(e){
+
+        console.warn(
+            "[CELK Helper V32] Erro procurando horário no histórico da triagem:",
+            e
+        );
+
+    }
+
+    // ==================================================
+    // 3. TERCEIRA FONTE — TEXTO GERAL DA TELA
+    // ==================================================
+    try{
+
+        const tela = document.body.innerText || "";
+
+        const padroes = [
+
+            // TRIAGEM ... 11/08/2026 - 15:57
+            /TRIAGEM[\s\S]{0,1500}?\b\d{2}\/\d{2}\/\d{4}\s*(?:-|–|—|às|as)?\s*([01]\d|2[0-3]):[0-5]\d\b/i,
+
+            // CHEGADA: 15:57 / ENTRADA: 15:57
+            /(?:CHEGADA|ENTRADA)\s*[:\-]?\s*(?:\d{2}\/\d{2}\/\d{4}\s*)?([01]\d|2[0-3]):[0-5]\d\b/i,
+
+            // Data - horário
+            /\b\d{2}\/\d{2}\/\d{4}\s*(?:-|–|—|às|as)\s*([01]\d|2[0-3]):[0-5]\d\b/
+        ];
+
+        for(const regex of padroes){
+
+            const match = tela.match(regex);
+
+            if(match){
+
+                const horario =
+                    match[1] ||
+                    match[0].match(
+                        /\b(?:[01]\d|2[0-3]):[0-5]\d\b/
+                    )?.[0];
+
+                if(horario){
+                    console.log(
+                        "[CELK Helper V32] Chegada encontrada no texto geral:",
+                        horario
+                    );
+                    return horario;
+                }
+            }
+        }
+
+    }catch(e){
+
+        console.warn(
+            "[CELK Helper V32] Erro lendo texto geral para chegada:",
+            e
+        );
+
+    }
+
+    console.warn(
+        "[CELK Helper V32] Horário de chegada NÃO encontrado."
+    );
+
+    return "";
+}
+
 function montarDeclaracaoAcompanhante(dados){
 
     return `
@@ -2355,7 +2779,28 @@ async function prepararDeclaracao(acompanhante){
 
         const alvos =
             await esperarEditorDeclaracao(12000);
+// ==================================================
+// RECUPERA O NOME DA MÃE DO MODELO PADRÃO DO CELK
+// ==================================================
 
+if(acompanhante){
+
+    const nomeMaeModelo = obterNomeMae();
+
+    if(
+        nomeMaeModelo &&
+        nomeMaeModelo !== "NÃO IDENTIFICADO"
+    ){
+
+        dados.nomeMae = nomeMaeModelo;
+
+        console.log(
+            "[CELK Helper] Nome da mãe identificado:",
+            dados.nomeMae
+        );
+
+    }
+}
         if(!alvos.length){
 
             throw new Error(
@@ -2773,13 +3218,13 @@ function substituirDiasNoTexto(texto, dias){
     // Substitui apenas o espaço destinado à quantidade de dias.
     let novo = texto.replace(
         /_{2,}\s*\(\s*\)\s*(?=DIAS\s+DE\s+AFASTAMENTO)/i,
-        String(dias)
+        String(dias) + " "
     );
 
     // Fallback para pequenas variações do modelo.
     novo = novo.replace(
         /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
-        String(dias)
+        String(dias) + " "
     );
 
     return novo;
@@ -2898,7 +3343,7 @@ function substituirDiasNoHtml(html, dias){
 
         const teste = novo.replace(
             regex,
-            String(dias)
+            String(dias) + " "
         );
 
         if(teste !== novo){
@@ -2924,7 +3369,7 @@ function substituirDiasEmTextoVisivel(texto, dias){
     // Mantém o restante do documento exatamente como está.
     return texto.replace(
         /_{2,}\s*(?:\(\s*\))?\s*(?=dias\s+de\s+afastamento)/i,
-        String(dias)
+        String(dias) + " "
     );
 }
 
