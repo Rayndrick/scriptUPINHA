@@ -2385,122 +2385,268 @@ function aplicarLayoutAssinaturaAtestado(comCid){
             return;
         }
 
-        let html = el.innerHTML;
-        const htmlOriginal = html;
+        // --------------------------------------------------
+        // FUNÇÕES AUXILIARES
+        // --------------------------------------------------
+
+        const textoEl = (node) =>
+            normalizarAtestadoTexto(
+                node?.innerText ||
+                node?.textContent ||
+                ""
+            );
+
+        const contemMedico = (node) => {
+            const t = textoEl(node);
+            return (
+                t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
+                /CRM\s*30235/i.test(t)
+            );
+        };
 
         // --------------------------------------------------
         // 1) SEM CID:
-        //    remove toda a parte de autorização/assinatura do
-        //    paciente, deixando somente a assinatura médica.
+        //    REMOVE DE FORMA ROBUSTA TODA A ÁREA DE
+        //    AUTORIZAÇÃO/ASSINATURA/DADOS DO PACIENTE.
+        //
+        //    O problema da versão anterior era depender de:
+        //      "EU," + "AUTORIZO..."
+        //
+        //    O CELK pode montar esses trechos em elementos
+        //    diferentes e ainda deixar <p> vazios, que viram
+        //    exatamente o "espaço de assinatura" que aparece.
         // --------------------------------------------------
+
         if(!comCid){
 
-            const blocos = [...el.querySelectorAll("p, div, li, td, section")];
+            const blocos = [
+                ...el.querySelectorAll(
+                    "p, div, li, td, section, span"
+                )
+            ];
 
+            // Localiza o bloco MÉDICO ANTES de remover qualquer coisa.
+            // Isso serve como ponto final seguro da remoção.
+            const blocoMedico = blocos.find(contemMedico);
+
+            // Procura o início da seção do paciente.
+            // Aceita várias formas que o CELK pode usar.
             const inicioPaciente = blocos.find(b => {
-                const t = normalizarAtestadoTexto(b.innerText || b.textContent);
+
+                const t = textoEl(b);
+
+                if(!t || contemMedico(b)){
+                    return false;
+                }
+
                 return (
-                    t.startsWith("EU,") &&
+                    t.includes("AUTORIZO A DIVULGACAO DO CID") ||
+                    t.includes("AUTORIZO A DIVULGAÇÃO DO CID") ||
                     (
-                        t.includes("AUTORIZO A DIVULGACAO DO CID") ||
-                        t.includes("AUTORIZO A DIVULGAÇÃO DO CID")
+                        t.includes("ASSINATURA PACIENTE") &&
+                        !t.includes("CRM 30235")
+                    ) ||
+                    (
+                        t.includes("ASSINATURA DO PACIENTE") &&
+                        !t.includes("CRM 30235")
+                    ) ||
+                    (
+                        t.startsWith("EU,") &&
+                        (
+                            t.includes("CID") ||
+                            t.includes("AUTORIZ")
+                        )
                     )
                 );
             });
 
-            if(inicioPaciente){
+            if(inicioPaciente && blocoMedico){
 
-                // Remove o bloco de autorização e os blocos seguintes
-                // que correspondem à assinatura e aos dados do paciente.
-                let atual = inicioPaciente;
-                let remover = false;
-
-                const todos = [...inicioPaciente.parentElement.children];
-                const idx = todos.indexOf(inicioPaciente);
-
-                for(let i = idx; i < todos.length; i++){
-                    const no = todos[i];
-                    const texto = normalizarAtestadoTexto(
-                        no.innerText || no.textContent
+                // Só executa se a seção do paciente estiver antes
+                // da assinatura médica no DOM.
+                const posicao =
+                    inicioPaciente.compareDocumentPosition(
+                        blocoMedico
                     );
 
-                    // A partir da autorização, tudo que vem depois no
-                    // documento é a seção do paciente no modelo IDEAS.
-                    if(
-                        i === idx ||
-                        remover ||
-                        texto.includes("ASSINATURA PACIENTE") ||
-                        texto.includes("EMAIL:") ||
-                        texto.includes("TELEFONE:") ||
-                        texto.includes("ENDEREÇO:") ||
-                        texto.includes("SEDE IDEAS")
-                    ){
-                        no.remove();
-                        remover = true;
+                const pacienteAntesDoMedico =
+                    !!(
+                        posicao &
+                        Node.DOCUMENT_POSITION_FOLLOWING
+                    );
+
+                if(pacienteAntesDoMedico){
+
+                    try{
+
+                        // Remove desde o início da seção do paciente
+                        // até imediatamente antes do bloco médico.
+                        const range = document.createRange();
+
+                        range.setStartBefore(inicioPaciente);
+                        range.setEndBefore(blocoMedico);
+                        range.deleteContents();
+
+                        aplicado = true;
+
+                        console.log(
+                            "[CELK Helper V32] Seção de assinatura/autorização do paciente REMOVIDA."
+                        );
+
+                    }catch(e){
+
+                        console.warn(
+                            "[CELK Helper V32] Falha ao remover seção do paciente por Range:",
+                            e
+                        );
                     }
                 }
 
-                aplicado = true;
-            }else{
+            }else if(inicioPaciente){
 
-                // Fallback para o caso de o CELK não separar os blocos.
+                // Fallback quando não foi possível localizar o
+                // bloco médico: remove a seção pelo HTML, mas
+                // preserva o restante do documento.
+                let html = el.innerHTML;
+
+                const htmlAntes = html;
+
                 html = html.replace(
-                    /<[^>]*>\s*EU,.*?(?=<[^>]*>\s*RAYNDRICK KELRYN ASSIS LIMA\b)/is,
+                    /(?:EU,\s*|AUTORIZO\s+A\s+DIVULGACAO\s+DO\s+CID|AUTORIZO\s+A\s+DIVULGAÇÃO\s+DO\s+CID).*?(?=RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA)/is,
                     ""
                 );
 
-                html = html.replace(
-                    /EU,.*?(?=RAYNDRICK KELRYN ASSIS LIMA\s*CRM\s*30235)/is,
-                    ""
-                );
+                if(html !== htmlAntes){
+                    el.innerHTML = html;
+                    aplicado = true;
+
+                    console.log(
+                        "[CELK Helper V32] Fallback HTML: seção do paciente removida."
+                    );
+                }
+            }
+
+            // --------------------------------------------------
+            // LIMPEZA CRÍTICA:
+            // remove <p>/<div>/<li>/<td> vazios imediatamente
+            // antes do bloco da assinatura médica.
+            //
+            // Isso elimina o "buraco" que o modelo do CELK deixa
+            // mesmo depois de remover a assinatura do paciente.
+            // --------------------------------------------------
+
+            const medicoAtualizado = [
+                ...el.querySelectorAll("p, div, li, td, section")
+            ].find(contemMedico);
+
+            if(medicoAtualizado){
+
+                let anterior = medicoAtualizado.previousElementSibling;
+
+                while(anterior){
+
+                    const txt = textoEl(anterior);
+
+                    const somenteEspaco =
+                        !txt &&
+                        !(
+                            anterior.querySelector &&
+                            anterior.querySelector(
+                                "img, table, input, textarea, canvas"
+                            )
+                        );
+
+                    if(!somenteEspaco){
+                        break;
+                    }
+
+                    const remover = anterior;
+                    anterior = anterior.previousElementSibling;
+
+                    remover.remove();
+                    aplicado = true;
+                }
             }
         }
 
         // --------------------------------------------------
         // 2) ESPAÇO MAIOR PARA CARIMBO/ASSINATURA MÉDICA.
-        //    Aplica nos dois modelos, COM e SEM CID.
+        //    Aplica nos dois modelos, COM E SEM CID.
+        //
+        //    Usa ID para nunca acumular vários espaços se o
+        //    CELK reconstruir o editor ou a função for chamada
+        //    novamente.
         // --------------------------------------------------
 
-        const espacoAssinatura =
-            '<p style="margin:0; line-height:1.2; height:120px;">&nbsp;</p>';
+        const blocosMedicoFinal = [
+            ...el.querySelectorAll("p, div, li, td, section")
+        ];
 
-        // Procura o bloco que contém o nome/CRM do médico e coloca
-        // um espaço grande imediatamente antes dele.
-        const blocosMedico = [...el.querySelectorAll("p, div, li, td")];
+        const blocoMedicoFinal = blocosMedicoFinal.find(contemMedico);
 
-        const blocoMedico = blocosMedico.find(b => {
-            const t = normalizarAtestadoTexto(b.innerText || b.textContent);
-            return (
-                t.includes("RAYNDRICK KELRYN ASSIS LIMA") &&
-                t.includes("CRM 30235")
-            );
-        });
+        if(blocoMedicoFinal){
 
-        if(blocoMedico){
+            // Remove eventual espaço criado anteriormente pela
+            // versão antiga do script, evitando duplicação.
+            [
+                ...el.querySelectorAll(
+                    "#celk-espaco-assinatura-medica"
+                )
+            ].forEach(x => x.remove());
+
             const espaco = document.createElement("p");
-            espaco.style.cssText = "margin:0; line-height:1.2; height:120px;";
+
+            espaco.id = "celk-espaco-assinatura-medica";
+
+            espaco.style.cssText =
+                "margin:0; line-height:1.2; height:120px;";
+
             espaco.innerHTML = "&nbsp;";
-            blocoMedico.parentNode.insertBefore(espaco, blocoMedico);
+
+            blocoMedicoFinal.parentNode.insertBefore(
+                espaco,
+                blocoMedicoFinal
+            );
+
             aplicado = true;
+
         }else{
-            // Fallback caso o nome esteja em HTML sem bloco identificável.
-            html = html.replace(
+
+            // Fallback caso o nome/CRM esteja diretamente no HTML.
+            const htmlOriginal = el.innerHTML;
+
+            const espacoAssinatura =
+                '<p id="celk-espaco-assinatura-medica" ' +
+                'style="margin:0; line-height:1.2; height:120px;">' +
+                '&nbsp;</p>';
+
+            el.innerHTML = el.innerHTML.replace(
                 /(RAYNDRICK\s+KELRYN\s+ASSIS\s+LIMA\s+CRM\s*30235)/i,
                 espacoAssinatura + "$1"
             );
+
+            if(el.innerHTML !== htmlOriginal){
+                aplicado = true;
+            }
         }
 
-        if(html !== htmlOriginal){
-            el.innerHTML = html;
-            aplicado = true;
-        }
+        // --------------------------------------------------
+        // 3) SINCRONIZA COM TINYMCE / WICKET
+        // --------------------------------------------------
 
-        // Sincroniza com TinyMCE/Wicket quando existir.
         try{
-            if(typeof tinymce !== "undefined" && tinymce?.editors?.length){
+
+            if(
+                typeof tinymce !== "undefined" &&
+                tinymce?.editors?.length
+            ){
+
                 tinymce.editors.forEach(editor => {
+
                     try{
+
                         const body = editor.getBody?.();
+
                         if(
                             body &&
                             (
@@ -2509,19 +2655,29 @@ function aplicarLayoutAssinaturaAtestado(comCid){
                                 el.contains?.(body)
                             )
                         ){
+
                             editor.setContent(body.innerHTML);
                             editor.fire("input");
                             editor.fire("change");
                         }
-                    }catch(_){ }
+
+                    }catch(_){}
                 });
             }
-        }catch(_){ }
+
+        }catch(_){}
 
         try{
-            el.dispatchEvent(new Event("input", {bubbles:true}));
-            el.dispatchEvent(new Event("change", {bubbles:true}));
-        }catch(_){ }
+
+            el.dispatchEvent(
+                new Event("input",{bubbles:true})
+            );
+
+            el.dispatchEvent(
+                new Event("change",{bubbles:true})
+            );
+
+        }catch(_){}
     });
 
     console.log(
@@ -2532,7 +2688,6 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
     return aplicado;
 }
-
 async function prepararAtestado(dias, comCid){
 
     // Guarda somente janelas/abas abertas pelo próprio fluxo do Atestado.
@@ -5706,5 +5861,3 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
-
-
