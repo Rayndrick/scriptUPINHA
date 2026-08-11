@@ -1960,23 +1960,50 @@ async function prepararAtestado(dias, comCid){
 
         if(!campoDias){
 
-            const novoDocumento = [...document.querySelectorAll(
-                "button, a, input[type='button'], input[type='submit'], " +
-                "div, span"
-            )].find(el => {
+            console.log(
+                "[CELK Helper] Formulário oficial do Atestado não está aberto. " +
+                "Abrindo NOVO DOCUMENTO..."
+            );
+
+            const candidatosNovoDocumento = [
+                ...document.querySelectorAll(
+                    "button, a, input[type='button'], input[type='submit'], " +
+                    "div, span"
+                )
+            ];
+
+            const novoDocumento = candidatosNovoDocumento.find(el => {
 
                 const texto = (
                     el.innerText ||
                     el.value ||
                     el.getAttribute("title") ||
+                    el.getAttribute("aria-label") ||
                     ""
                 )
                 .replace(/\s+/g," ")
                 .trim()
                 .toUpperCase();
 
-                return texto === "NOVO DOCUMENTO";
+                if(texto !== "NOVO DOCUMENTO"){
+                    return false;
+                }
+
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+
+                return (
+                    style.display !== "none" &&
+                    style.visibility !== "hidden" &&
+                    rect.width > 0 &&
+                    rect.height > 0
+                );
             });
+
+            console.log(
+                "[CELK Helper] Novo Documento encontrado:",
+                !!novoDocumento
+            );
 
             if(novoDocumento){
 
@@ -1989,11 +2016,24 @@ async function prepararAtestado(dias, comCid){
             }else{
 
                 const tinyNovo = document.querySelector(
-                    'a.mce_newdocument[title="Novo documento"]'
+                    'a.mce_newdocument[title="Novo documento"], ' +
+                    'a[title="Novo documento"], ' +
+                    'a[title="Novo Documento"]'
                 );
 
                 if(tinyNovo){
+
+                    console.log(
+                        "[CELK Helper] Abrindo Novo Documento pelo botão alternativo."
+                    );
+
                     tinyNovo.click();
+
+                }else{
+
+                    throw new Error(
+                        "Botão 'Novo Documento' não encontrado na tela de Documentos."
+                    );
                 }
             }
 
@@ -2322,64 +2362,66 @@ async function prepararAtestado(dias, comCid){
 
 function localizarCampoDiasAtestado(){
 
-    // NUNCA considerar o campo do nosso próprio modal.
-    // Esse era o motivo de o fluxo parar antes de abrir o documento oficial.
-    const ignorar = document.querySelector("#celk-atestado-dias");
+    // IMPORTANTÍSSIMO:
+    // Só considerar o campo pertencente ao FORMULÁRIO OFICIAL
+    // do Atestado Médico.
+    //
+    // Nunca usar campos genéricos da página de atendimento que contenham
+    // "DIAS", pois isso faz o Helper achar que o atestado já está aberto.
 
-    // ID conhecido do formulário OFICIAL do CELK.
-    const direto = document.querySelector(
-        "#AtestadoMedico_NumeroDias.form-input, " +
-        "#AtestadoMedico_NumeroDias"
-    );
+    const seletoresOficiais = [
+        "#AtestadoMedico_NumeroDias",
+        'input[name*="AtestadoMedico_NumeroDias"]',
+        'input[id*="AtestadoMedico"][id*="NumeroDias"]',
+        'input[name*="NumeroDias"]'
+    ];
 
-    if(direto && direto !== ignorar){
-        return direto;
+    for(const seletor of seletoresOficiais){
+
+        const campos = [
+            ...document.querySelectorAll(seletor)
+        ];
+
+        const campo = campos.find(el => {
+
+            if(!el){
+                return false;
+            }
+
+            // Jamais aceitar nosso campo de quantidade do modal.
+            if(el.id === "celk-atestado-dias"){
+                return false;
+            }
+
+            if(el.closest("#celk-atestado-overlay")){
+                return false;
+            }
+
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+
+            return (
+                style.display !== "none" &&
+                style.visibility !== "hidden" &&
+                rect.width > 0 &&
+                rect.height > 0
+            );
+        });
+
+        if(campo){
+            console.log(
+                "[CELK Helper] Campo OFICIAL de dias localizado:",
+                campo.id || campo.name
+            );
+            return campo;
+        }
     }
 
-    // Fallback: somente campos fora do modal do Helper.
-    const inputs = [
-        ...document.querySelectorAll("input, textarea")
-    ].filter(el => {
-
-        if(el === ignorar){
-            return false;
-        }
-
-        if(el.closest("#celk-atestado-overlay")){
-            return false;
-        }
-
-        return true;
-    });
-
-    return inputs.find(el => {
-
-        const atributos = [
-            el.id,
-            el.name,
-            el.placeholder,
-            el.getAttribute("data-bind"),
-            el.getAttribute("aria-label")
-        ]
-        .filter(Boolean)
-        .join(" ")
-        .toUpperCase();
-
-        return (
-            atributos.includes("NUMERODIAS") ||
-            atributos.includes("NUMERO_DIAS") ||
-            (
-                atributos.includes("DIAS") &&
-                (
-                    atributos.includes("ATEST") ||
-                    atributos.includes("AFAST")
-                )
-            )
-        );
-
-    }) || null;
+    // Não existe fallback genérico de "DIAS".
+    // Se o formulário oficial não estiver aberto, retornar null
+    // força o fluxo a abrir "Novo Documento".
+    return null;
 }
-
 
 function localizarCheckboxCidAtestado(){
 
@@ -2553,17 +2595,27 @@ function aguardarMudancaDaTela(timeout=12000){
     return new Promise(resolve => {
 
         const inicio = Date.now();
-        const inicial = document.body.innerText?.length || 0;
 
         const verificar = () => {
 
-            const atual = document.body.innerText?.length || 0;
+            // Para este fluxo, só interessa a abertura do formulário/modal
+            // relacionado ao documento. Mudança de tamanho da página não conta.
+            const selectModelo = [...document.querySelectorAll("select")]
+                .find(el => {
+
+                    const textoOpcoes = [...el.options]
+                        .map(o => (o.textContent || "").trim().toUpperCase())
+                        .join(" | ");
+
+                    return (
+                        textoOpcoes.includes("ATESTADO MEDICO") ||
+                        textoOpcoes.includes("ATESTADO MÉDICO")
+                    );
+                });
 
             if(
-                document.querySelector(
-                    "#AtestadoMedico_NumeroDias"
-                ) ||
-                Math.abs(atual - inicial) > 100
+                document.querySelector("#AtestadoMedico_NumeroDias") ||
+                selectModelo
             ){
                 resolve(true);
                 return;
