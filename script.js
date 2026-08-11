@@ -1093,15 +1093,34 @@ function iniciarAtualizacao(){
 
 function obterClassificacao(){
 
-    const elemento = document.querySelector(
-        'div.icon32[class*="ball-"]'
+    // O CELK apresenta a classificação através de uma DIV
+    // com classe icon32 + ball-cor.
+    // Exemplos:
+    // ball-blue   = AZUL
+    // ball-green  = VERDE
+    // ball-yellow = AMARELO
+    // ball-orange = LARANJA
+    // ball-red    = VERMELHO
+
+    const elementos = Array.from(
+        document.querySelectorAll('div.icon32[class*="ball-"]')
     );
+
+    // Prioriza o elemento visível.
+    const elemento = elementos.find(el => {
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== "none" &&
+               style.visibility !== "hidden" &&
+               rect.width > 0 &&
+               rect.height > 0;
+    }) || elementos[0];
 
     if(!elemento){
         return "NÃO IDENTIFICADA";
     }
 
-    const classes = elemento.className;
+    const classes = (elemento.className || "").toLowerCase();
 
     if(classes.includes("ball-red")){
         return "VERMELHO";
@@ -1120,6 +1139,35 @@ function obterClassificacao(){
     }
 
     if(classes.includes("ball-blue")){
+        return "AZUL";
+    }
+
+    // Fallback: caso o CELK altere a classe, tenta identificar
+    // pelo texto/atributo do próprio elemento.
+    const conteudo = (
+        elemento.textContent ||
+        elemento.getAttribute("title") ||
+        elemento.getAttribute("aria-label") ||
+        ""
+    ).trim().toUpperCase();
+
+    if(/VERMELHO|RED/.test(conteudo)){
+        return "VERMELHO";
+    }
+
+    if(/LARANJA|ORANGE/.test(conteudo)){
+        return "LARANJA";
+    }
+
+    if(/AMARELO|YELLOW/.test(conteudo)){
+        return "AMARELO";
+    }
+
+    if(/VERDE|GREEN/.test(conteudo)){
+        return "VERDE";
+    }
+
+    if(/AZUL|BLUE/.test(conteudo)){
         return "AZUL";
     }
 
@@ -3585,4 +3633,5 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
+
 
