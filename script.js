@@ -1951,7 +1951,7 @@ ${exameClin}
         '</div>'
     );
 
-    const classificacao = obterClassificacao();
+    const classificacao = obterClassificacao(nome);
 
     adicionarRelatorio(
         nome,
@@ -2007,99 +2007,268 @@ function iniciarAtualizacao(){
 // IDENTIFICAR CLASSIFICAÇÃO DE RISCO
 // --------------------------------------------------
 
-function obterClassificacao(){
+function normalizarClassificacaoTexto(valor){
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase();
+}
 
-    // O CELK apresenta a classificação através de uma DIV
-    // com classe icon32 + ball-cor.
-    // Exemplos:
-    // ball-blue   = AZUL
-    // ball-green  = VERDE
-    // ball-yellow = AMARELO
-    // ball-orange = LARANJA
-    // ball-red    = VERMELHO
-
-    const elementos = Array.from(
-        document.querySelectorAll('div.icon32[class*="ball-"]')
-    );
-
-    // Prioriza o elemento visível.
-    const elemento = elementos.find(el => {
-        const style = window.getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        return style.display !== "none" &&
-               style.visibility !== "hidden" &&
-               rect.width > 0 &&
-               rect.height > 0;
-    }) || elementos[0];
+function classeParaClassificacao(elemento){
 
     if(!elemento){
         return "NÃO IDENTIFICADA";
     }
 
-    const classes = (elemento.className || "").toLowerCase();
+    const classes = String(elemento.className || "").toLowerCase();
 
-    if(classes.includes("ball-red")){
-        return "VERMELHO";
-    }
+    if(classes.includes("ball-red"))    return "VERMELHO";
+    if(classes.includes("ball-orange")) return "LARANJA";
+    if(classes.includes("ball-yellow")) return "AMARELO";
+    if(classes.includes("ball-green"))  return "VERDE";
+    if(classes.includes("ball-blue"))   return "AZUL";
 
-    if(classes.includes("ball-orange")){
-        return "LARANJA";
-    }
-
-    if(classes.includes("ball-yellow")){
-        return "AMARELO";
-    }
-
-    if(classes.includes("ball-green")){
-        return "VERDE";
-    }
-
-    if(classes.includes("ball-blue")){
-        return "AZUL";
-    }
-
-    // Fallback: caso o CELK altere a classe, tenta identificar
-    // pelo texto/atributo do próprio elemento.
-    const conteudo = (
+    const conteudo = normalizarClassificacaoTexto(
         elemento.textContent ||
         elemento.getAttribute("title") ||
         elemento.getAttribute("aria-label") ||
+        elemento.getAttribute("data-title") ||
         ""
-    ).trim().toUpperCase();
+    );
 
-    if(/VERMELHO|RED/.test(conteudo)){
-        return "VERMELHO";
-    }
-
-    if(/LARANJA|ORANGE/.test(conteudo)){
-        return "LARANJA";
-    }
-
-    if(/AMARELO|YELLOW/.test(conteudo)){
-        return "AMARELO";
-    }
-
-    if(/VERDE|GREEN/.test(conteudo)){
-        return "VERDE";
-    }
-
-    if(/AZUL|BLUE/.test(conteudo)){
-        return "AZUL";
-    }
+    if(/VERMELHO|RED/.test(conteudo)) return "VERMELHO";
+    if(/LARANJA|ORANGE/.test(conteudo)) return "LARANJA";
+    if(/AMARELO|YELLOW/.test(conteudo)) return "AMARELO";
+    if(/VERDE|GREEN/.test(conteudo)) return "VERDE";
+    if(/AZUL|BLUE/.test(conteudo)) return "AZUL";
 
     return "NÃO IDENTIFICADA";
 }
 
+function elementoVisivel(el){
+    if(!el) return false;
+
+    try{
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+
+        return (
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0
+        );
+    }catch(_){
+        return true;
+    }
+}
+
+function obterClassificacao(nomePaciente, somenteCorrespondente){
+
+    const nome = normalizarClassificacaoTexto(nomePaciente);
+
+    // =========================================================
+    // FONTE PRINCIPAL DO CELK
+    // =========================================================
+    // Na tabela de atendimentos a classificação está no elemento:
+    // div ... class="icon32 ball-orange"
+    // e o wicketpath observado é semelhante a:
+    // form_table_table_body_rows_501_cells_5_cell
+    //
+    // Portanto NÃO podemos pegar simplesmente o primeiro ball- da
+    // página, pois ele pode pertencer a OUTRO paciente.
+    // Primeiro localizamos a linha do paciente e, dentro dela,
+    // buscamos a célula de classificação.
+    // =========================================================
+
+    const classificacoes = Array.from(
+        document.querySelectorAll(
+            'div.icon32[class*="ball-"], ' +
+            'div[class*="icon32"][class*="ball-"], ' +
+            '[wicketpath*="cells_5_cell"][class*="ball-"], ' +
+            '[class*="ball-red"], [class*="ball-orange"], ' +
+            '[class*="ball-yellow"], [class*="ball-green"], ' +
+            '[class*="ball-blue"]'
+        )
+    );
+
+    // ---------------------------------------------------------
+    // 1. TENTA ENCONTRAR O ÍCONE NA MESMA LINHA DO PACIENTE
+    // ---------------------------------------------------------
+    if(nome && nome.length >= 4){
+
+        const elementosNome = Array.from(document.querySelectorAll("body *"))
+            .filter(function(el){
+                if(!elementoVisivel(el)) return false;
+
+                const texto = normalizarClassificacaoTexto(el.textContent || "");
+
+                return (
+                    texto === nome ||
+                    (texto.length < nome.length + 80 && texto.includes(nome))
+                );
+            });
+
+        for(const nomeEl of elementosNome){
+
+            let bloco = nomeEl;
+
+            // Sobe até encontrar um container que represente a linha.
+            for(let nivel = 0; nivel < 10 && bloco; nivel++){
+
+                const wicket = String(bloco.getAttribute?.("wicketpath") || "");
+                const tag = String(bloco.tagName || "").toLowerCase();
+
+                const pareceLinha =
+                    tag === "tr" ||
+                    /table_body_rows/i.test(wicket) ||
+                    /_rows_/i.test(wicket) ||
+                    bloco.querySelector?.('[wicketpath*="cells_5_cell"]');
+
+                if(pareceLinha){
+
+                    // Primeiro tenta EXATAMENTE a célula 5.
+                    const celula5 = bloco.querySelector?.(
+                        '[wicketpath*="cells_5_cell"][class*="ball-"]'
+                    );
+
+                    if(celula5){
+                        const classificacao = classeParaClassificacao(celula5);
+
+                        if(classificacao !== "NÃO IDENTIFICADA"){
+                            console.log(
+                                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA NA LINHA:",
+                                nomePaciente,
+                                classificacao,
+                                celula5
+                            );
+                            return classificacao;
+                        }
+                    }
+
+                    // Fallback: qualquer ball- dentro da mesma linha.
+                    const daLinha = Array.from(
+                        bloco.querySelectorAll?.(
+                            'div.icon32[class*="ball-"], ' +
+                            'div[class*="icon32"][class*="ball-"]'
+                        ) || []
+                    );
+
+                    for(const el of daLinha){
+                        const classificacao = classeParaClassificacao(el);
+                        if(classificacao !== "NÃO IDENTIFICADA"){
+                            console.log(
+                                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA NA LINHA:",
+                                nomePaciente,
+                                classificacao
+                            );
+                            return classificacao;
+                        }
+                    }
+                }
+
+                bloco = bloco.parentElement;
+            }
+        }
+    }
+
+    // Em modo estrito, NÃO usa o primeiro ícone da página.
+    // Isso é usado para corrigir registros antigos do relatório
+    // somente quando conseguimos relacionar a classificação à
+    // linha exata daquele paciente.
+    if(somenteCorrespondente){
+        return "NÃO IDENTIFICADA";
+    }
+
+    // ---------------------------------------------------------
+    // 2. TENTA PELO WICKETPATH DA CÉLULA 5
+    // ---------------------------------------------------------
+    const celulas5 = Array.from(
+        document.querySelectorAll(
+            '[wicketpath*="cells_5_cell"][class*="ball-"]'
+        )
+    );
+
+    for(const celula of celulas5){
+        const classificacao = classeParaClassificacao(celula);
+        if(classificacao !== "NÃO IDENTIFICADA"){
+            console.log(
+                "[CELK Helper V32] CLASSIFICAÇÃO ENCONTRADA EM CELLS_5_CELL:",
+                classificacao
+            );
+            return classificacao;
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 3. FALLBACK FINAL — PRIMEIRO ÍCONE VISÍVEL
+    // ---------------------------------------------------------
+    // Só usa este fallback quando não foi possível relacionar o
+    // paciente à linha. Isso evita o erro anterior na maioria das
+    // situações em que existem vários pacientes na página.
+    const elemento = classificacoes.find(elementoVisivel) || classificacoes[0];
+
+    const classificacaoFallback = classeParaClassificacao(elemento);
+
+    console.log(
+        "[CELK Helper V32] CLASSIFICAÇÃO FALLBACK:",
+        nomePaciente,
+        classificacaoFallback
+    );
+
+    return classificacaoFallback;
+}
 
 function adicionarRelatorio(nome, idade, chegada, classificacao){
 
-    const lista = JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
+    const lista = JSON.parse(
+        localStorage.getItem("celk_relatorio") || "[]"
+    );
 
-    // evita duplicar
-    if(lista.some(p =>
+    const existente = lista.find(p =>
         p.nome === nome &&
         p.chegada === chegada
-    )){
+    );
+
+    // ---------------------------------------------------------
+    // Se já existe, NÃO descarta a atualização.
+    // Se a classificação antiga era "NÃO IDENTIFICADA", ela será
+    // substituída assim que o ícone correto estiver disponível.
+    // ---------------------------------------------------------
+    if(existente){
+
+        if(
+            classificacao &&
+            classificacao !== "NÃO IDENTIFICADA" &&
+            (
+                !existente.classificacao ||
+                existente.classificacao === "NÃO IDENTIFICADA"
+            )
+        ){
+            existente.classificacao = classificacao;
+
+            localStorage.setItem(
+                "celk_relatorio",
+                JSON.stringify(lista)
+            );
+
+            console.log(
+                "[CELK Helper V32] CLASSIFICAÇÃO ATUALIZADA:",
+                nome,
+                classificacao
+            );
+        }
+
+        // Continua tentando caso o CELK ainda esteja montando a tabela.
+        if(!classificacao || classificacao === "NÃO IDENTIFICADA"){
+            agendarAtualizacaoClassificacaoRelatorio(
+                nome,
+                chegada
+            );
+        }
+
         return;
     }
 
@@ -2134,30 +2303,89 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
     }
 
     lista.push({
-
-    numero: lista.length + 1,
-
-    nome,
-
-    idade,
-
-    classificacao,
-
-    chegada,
-
-    atendido,
-
-    tempo
-
-});
+        numero: lista.length + 1,
+        nome,
+        idade,
+        classificacao: classificacao || "NÃO IDENTIFICADA",
+        chegada,
+        atendido,
+        tempo
+    });
 
     localStorage.setItem(
         "celk_relatorio",
         JSON.stringify(lista)
     );
 
-    console.log("Paciente salvo:", nome);
+    console.log(
+        "[CELK Helper V32] PACIENTE SALVO:",
+        nome,
+        "| CLASSIFICAÇÃO:",
+        classificacao
+    );
 
+    // O ícone pode aparecer depois que a evolução é aberta.
+    // Faz várias tentativas e atualiza o mesmo registro.
+    if(!classificacao || classificacao === "NÃO IDENTIFICADA"){
+        agendarAtualizacaoClassificacaoRelatorio(
+            nome,
+            chegada
+        );
+    }
+}
+
+function agendarAtualizacaoClassificacaoRelatorio(nome, chegada){
+
+    const tentativas = [500, 1200, 2500, 4000, 6000];
+
+    tentativas.forEach(function(delay){
+
+        setTimeout(function(){
+
+            const classificacao = obterClassificacao(nome);
+
+            if(
+                !classificacao ||
+                classificacao === "NÃO IDENTIFICADA"
+            ){
+                return;
+            }
+
+            const lista = JSON.parse(
+                localStorage.getItem("celk_relatorio") || "[]"
+            );
+
+            const paciente = lista.find(p =>
+                p.nome === nome &&
+                p.chegada === chegada
+            );
+
+            if(!paciente){
+                return;
+            }
+
+            if(
+                paciente.classificacao === classificacao
+            ){
+                return;
+            }
+
+            paciente.classificacao = classificacao;
+
+            localStorage.setItem(
+                "celk_relatorio",
+                JSON.stringify(lista)
+            );
+
+            console.log(
+                "[CELK Helper V32] CLASSIFICAÇÃO CORRIGIDA:",
+                nome,
+                "=>",
+                classificacao
+            );
+
+        }, delay);
+    });
 }
 
 //--------------------------------------------------
@@ -4974,7 +5202,66 @@ const lista = [
 
 }
 
+function atualizarClassificacoesRelatorioVisiveis(){
+
+    let lista = [];
+
+    try{
+        lista = JSON.parse(
+            localStorage.getItem("celk_relatorio") || "[]"
+        );
+    }catch(_){
+        return;
+    }
+
+    if(!Array.isArray(lista) || !lista.length){
+        return;
+    }
+
+    let alterou = false;
+
+    lista.forEach(function(paciente){
+
+        if(!paciente || !paciente.nome){
+            return;
+        }
+
+        // Somente aceita uma classificação encontrada na linha
+        // correspondente ao paciente. Nunca usa fallback global.
+        const classificacao = obterClassificacao(
+            paciente.nome,
+            true
+        );
+
+        if(
+            classificacao &&
+            classificacao !== "NÃO IDENTIFICADA" &&
+            paciente.classificacao !== classificacao
+        ){
+            paciente.classificacao = classificacao;
+            alterou = true;
+
+            console.log(
+                "[CELK Helper V32] RELATÓRIO ANTIGO CORRIGIDO:",
+                paciente.nome,
+                "=>",
+                classificacao
+            );
+        }
+    });
+
+    if(alterou){
+        localStorage.setItem(
+            "celk_relatorio",
+            JSON.stringify(lista)
+        );
+    }
+}
+
 function abrirRelatorio(){
+
+    // Corrige classificações antigas que ainda estejam como NÃO IDENTIFICADA.
+    atualizarClassificacoesRelatorioVisiveis();
 
     const pacientes =
         JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
