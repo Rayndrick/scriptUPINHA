@@ -60,6 +60,10 @@ window.celk.init = function(){
     // Captura o clique de finalização ANTES do CELK navegar/remover a tela.
     instalarCapturaFinalizacaoRelatorio();
 
+    // FALLBACK: se o CELK não permitir capturar o botão de finalização,
+    // registra a saída quando a própria mensagem de sucesso aparecer.
+    instalarMonitorSucessoFinalizacao();
+
     if(window.celk.intervalo) return;
 
     window.celk.intervalo = setInterval(function(){
@@ -2658,6 +2662,28 @@ function salvarPacientePendente(
     }
 
     try{
+        // Guarda um pequeno histórico dos últimos pacientes abertos.
+        // Isso permite recuperar o paciente correto mesmo se o CELK
+        // trocar de tela antes de a mensagem de finalização aparecer.
+        let historico = [];
+        try{
+            historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+        }catch(_){ historico = []; }
+
+        if(!Array.isArray(historico)) historico = [];
+
+        historico.push(dados);
+        if(historico.length > 30){
+            historico = historico.slice(-30);
+        }
+
+        localStorage.setItem(
+            "celk_pendentes_historico",
+            JSON.stringify(historico)
+        );
+
         localStorage.setItem(
             "celk_paciente_pendente",
             JSON.stringify(dados)
@@ -2766,8 +2792,8 @@ function dadosPacienteAtual(){
     };
 }
 
-function registrarFinalizacaoRelatorio(){
-    const dados = dadosPacienteAtual();
+function registrarFinalizacaoRelatorio(dadosForcado){
+    const dados = dadosForcado || dadosPacienteAtual();
 
     if(!dados || !dados.nome){
         console.warn(
@@ -2864,6 +2890,28 @@ function registrarFinalizacaoRelatorio(){
         localStorage.removeItem(
             "celk_paciente_pendente"
         );
+
+        let historico = [];
+        try{
+            historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+        }catch(_){ historico = []; }
+
+        if(Array.isArray(historico)){
+            historico = historico.filter(function(item){
+                return !(
+                    item &&
+                    item.nome === dados.nome &&
+                    String(item.chegada || "") === String(dados.chegada || "")
+                );
+            });
+
+            localStorage.setItem(
+                "celk_pendentes_historico",
+                JSON.stringify(historico)
+            );
+        }
     }catch(_){}
 
     return true;
@@ -3058,6 +3106,143 @@ function instalarCapturaFinalizacaoRelatorio(){
 
     console.log(
         "[CELK RELATÓRIO V40] CAPTURA DE FINALIZAÇÃO INSTALADA."
+    );
+}
+
+// =========================================================
+// FALLBACK DE FINALIZAÇÃO PELO AVISO DO CELK
+// =========================================================
+// Em algumas telas/versões do CELK, o botão real de finalizar não chega
+// ao document como um clique capturável pelo Helper. Nessa situação o
+// CELK navega normalmente e exibe:
+//     "Atendimento finalizado com sucesso"
+//
+// O Helper usa essa mensagem como segunda confirmação da finalização.
+// Assim, o horário de saída/"Atendido" volta a ser gravado mesmo quando
+// a captura direta do botão falhar.
+function instalarMonitorSucessoFinalizacao(){
+
+    if(window.celk.monitorSucessoFinalizacao){
+        return;
+    }
+
+    window.celk.monitorSucessoFinalizacao = true;
+
+    let ultimaMensagem = 0;
+
+    function localizarPendenteAnterior(agoraMs){
+        try{
+            let historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+
+            if(!Array.isArray(historico)) return null;
+
+            const lista = obterListaRelatorio();
+
+            // Do mais recente para o mais antigo.
+            for(let i = historico.length - 1; i >= 0; i--){
+                const item = historico[i];
+
+                if(!item || !item.nome) continue;
+
+                // Não usa um paciente aberto depois da mensagem de sucesso.
+                if(Number(item.salvoEm || 0) > agoraMs) continue;
+
+                const paciente = localizarPacienteNoRelatorio(
+                    lista,
+                    item.nome,
+                    item.chegada
+                );
+
+                // Prioriza quem ainda não tem horário de atendimento.
+                if(paciente && !paciente.atendido){
+                    return item;
+                }
+            }
+
+            return null;
+        }catch(err){
+            console.warn(
+                "[CELK RELATÓRIO V40] erro ao localizar pendente anterior:",
+                err
+            );
+            return null;
+        }
+    }
+
+    function verificarMensagem(){
+        try{
+            const texto = normalizarCelk(
+                document.body && document.body.innerText || ""
+            );
+
+            if(!texto.includes("ATENDIMENTO FINALIZADO COM SUCESSO")){
+                return;
+            }
+
+            const agoraMs = Date.now();
+
+            if(agoraMs - ultimaMensagem < 1500){
+                return;
+            }
+
+            ultimaMensagem = agoraMs;
+
+            // Primeiro tenta o pendente atual.
+            let dados = dadosPacienteAtual();
+
+            // Se o CELK já trocou para outro paciente, recupera o último
+            // paciente ainda pendente que existia antes da mensagem.
+            if(!dados || !dados.nome){
+                dados = localizarPendenteAnterior(agoraMs);
+            }
+
+            if(!dados || !dados.nome){
+                console.warn(
+                    "[CELK RELATÓRIO V40] SUCESSO DETECTADO, MAS PACIENTE NÃO FOI RECUPERADO."
+                );
+                return;
+            }
+
+            console.log(
+                "[CELK RELATÓRIO V40] MENSAGEM DE SUCESSO DETECTADA — REGISTRANDO SAÍDA:",
+                dados.nome
+            );
+
+            const ok = registrarFinalizacaoRelatorio(dados);
+
+            console.log(
+                "[CELK RELATÓRIO V40] SAÍDA PELO FALLBACK:",
+                ok ? "OK" : "FALHOU"
+            );
+
+        }catch(err){
+            console.error(
+                "[CELK RELATÓRIO V40] ERRO NO MONITOR DE SUCESSO:",
+                err
+            );
+        }
+    }
+
+    const observer = new MutationObserver(function(){
+        verificarMensagem();
+    });
+
+    observer.observe(document.documentElement || document.body,{
+        childList:true,
+        subtree:true,
+        characterData:true
+    });
+
+    // Verificação inicial caso a mensagem já esteja presente quando o
+    // Helper for carregado/recarregado.
+    setTimeout(verificarMensagem, 100);
+
+    window.celk.observadorSucessoFinalizacao = observer;
+
+    console.log(
+        "[CELK RELATÓRIO V40] MONITOR DE SUCESSO DE FINALIZAÇÃO ATIVO."
     );
 }
 
