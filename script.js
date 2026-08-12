@@ -51,25 +51,48 @@ window.celk.init = function(){
 
     criarInterface();
 
-    // Captura a pulseira ANTES de o CELK retirar a linha da tabela.
-    instalarCapturaAntecipadaClassificacao();
+    // --------------------------------------------------
+    // RELATÓRIO — INICIALIZAÇÃO COMPLETA
+    // --------------------------------------------------
 
-    // Alimenta o cache quando estivermos na Consulta de Atendimentos.
-    try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+    // 1. Registra o paciente no momento do clique no nome.
+    // 2. Captura a classificação antes da navegação.
+    // 3. Captura a finalização.
+    // 4. Usa o monitor AJAX como fallback.
+    try{
+        instalarCapturaCliquePaciente();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR CAPTURA DE ENTRADA:",err);
+    }
+
+    try{
+        instalarCapturaFinalizacaoRelatorio();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR FINALIZAÇÃO:",err);
+    }
+
+    try{
+        instalarMonitorSucessoFinalizacao();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR MONITOR DE SUCESSO:",err);
+    }
+
+    try{
+        sincronizarClassificacoesDaTabela();
+    }catch(_){}
 
     if(window.celk.intervalo) return;
 
     window.celk.intervalo = setInterval(function(){
 
         if(!document.getElementById("celk-helper")){
-
-            console.log("Barra recriada.");
-
+            console.log("[CELK] Barra recriada.");
             criarInterface();
-
         }
 
-        try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+        try{
+            sincronizarClassificacoesDaTabela();
+        }catch(_){}
 
     },1000);
 
@@ -1959,12 +1982,6 @@ ${exameClin}
         textoHtml +
         '</div>'
     );
-
-    // O relatório agora é registrado SOMENTE quando o atendimento for
-    // efetivamente finalizado. Aqui salvamos os dados do paciente para
-    // garantir que nome + classificação já estejam prontos antes da saída.
-    registrarPacienteEmAtendimento(nome, idade, chegada);
-
 }
     //--------------------------------------------------
 // ATUALIZAÇÃO AUTOMÁTICA
@@ -2528,69 +2545,87 @@ function salvarPacientePendente(nome,idade,chegada,classificacao){
 }
 
 function instalarCapturaCliquePaciente(){
-    if(window.celk.cliquePacienteRelatorioHook) return;
 
-    window.celk.cliquePacienteRelatorioHook = true;
+    if(window.celk.relatorioCliquePacienteInstalado) return;
+    window.celk.relatorioCliquePacienteInstalado = true;
 
-    function capturar(evento){
+    function processarEvento(evento){
+
         try{
-            const alvo = evento && evento.target;
 
-            if(!alvo || !alvo.closest) return;
+            const alvo = obterLinhaDoEventoCELK(evento);
 
-            // O clique precisa ser no NOME, não no restante da linha.
-            const nomeCelula = alvo.closest(
-                'td[wicketpath*="_cells_5_cell"]'
-            );
+            if(!alvo) return;
 
-            if(!nomeCelula) return;
+            // Não registra clique em botões/ícones da linha.
+            const elemento = evento.target && evento.target.closest
+                ? evento.target.closest("a,button,input,select,textarea")
+                : null;
 
-            const tr = nomeCelula.closest("tr");
+            if(elemento){
 
-            if(!tr) return;
+                const textoElemento = (
+                    elemento.innerText ||
+                    elemento.textContent ||
+                    elemento.value ||
+                    ""
+                ).trim().toLowerCase();
 
-            const dados = extrairDadosDaLinhaPaciente(tr);
+                // Ícones/ações da linha não representam a entrada do paciente.
+                if(
+                    elemento.tagName === "BUTTON" ||
+                    elemento.tagName === "INPUT" ||
+                    elemento.tagName === "SELECT" ||
+                    elemento.tagName === "TEXTAREA"
+                ){
+                    return;
+                }
 
-            // NOVA REGRA: a CHEGADA do relatório é o momento em que o
-            // médico clica no NOME do paciente. O horário é obtido do
-            // elemento "Último acesso" do topo do CELK.
-            dados.chegada = obterHorarioDoElementoTopoCELK();
-
-            if(!dados.nome || !dados.chegada){
-                console.warn(
-                    "[CELK RELATÓRIO] NÃO FOI POSSÍVEL EXTRAIR NOME/CHEGADA DA LINHA.",
-                    dados
-                );
-                return;
+                // Se for link, só aceita quando houver texto compatível
+                // com o nome do paciente.
+                if(
+                    elemento.tagName === "A" &&
+                    !textoElemento
+                ){
+                    return;
+                }
             }
 
-            // Guarda tudo ANTES do CELK navegar/remover a linha.
-            salvarClassificacaoCache(
-                dados.nome,
-                dados.classificacao
-            );
+            // Captura a classificação ANTES da navegação do Wicket.
+            try{
+                capturarClassificacaoDaLinha(alvo);
+            }catch(_){}
 
-            salvarPacientePendente(
-                dados.nome,
-                dados.idade,
-                dados.chegada,
-                dados.classificacao
-            );
+            // Registra a chegada somente se for realmente o paciente.
+            registrarEntradaAoClicarPacienteCELK(alvo,evento);
 
         }catch(err){
-            console.error(
-                "[CELK RELATÓRIO] ERRO AO CAPTURAR CLIQUE DO PACIENTE:",
+
+            console.warn(
+                "[CELK RELATÓRIO] FALHA AO REGISTRAR ENTRADA:",
                 err
             );
+
         }
+
     }
 
-    document.addEventListener("pointerdown",capturar,true);
-    document.addEventListener("mousedown",capturar,true);
-    document.addEventListener("click",capturar,true);
+    // mousedown vem antes da navegação do CELK.
+    document.addEventListener(
+        "mousedown",
+        processarEvento,
+        true
+    );
+
+    // click funciona como segunda camada.
+    document.addEventListener(
+        "click",
+        processarEvento,
+        true
+    );
 
     console.log(
-        "[CELK RELATÓRIO] CAPTURA DE ENTRADA PELO NOME INSTALADA."
+        "[CELK RELATÓRIO] CAPTURA DE CLIQUE NO PACIENTE INSTALADA."
     );
 }
 
@@ -7256,11 +7291,55 @@ function iniciarObserver(){
     });
 
 }
-
-    window.celk.init = function(){
+window.celk.init = function(){
 
     criarInterface();
 
+    // --------------------------------------------------
+    // RELATÓRIO — INICIALIZAÇÃO REAL
+    // --------------------------------------------------
+
+    // O clique no nome é o ponto de entrada do relatório.
+    try{
+        instalarCapturaCliquePaciente();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR CAPTURA DE ENTRADA:",
+            err
+        );
+    }
+
+    // Mantém o cache das classificações sincronizado.
+    try{
+        sincronizarClassificacoesDaTabela();
+    }catch(err){
+        console.warn(
+            "[CELK RELATÓRIO] ERRO AO SINCRONIZAR CLASSIFICAÇÕES:",
+            err
+        );
+    }
+
+    // Captura a finalização do atendimento.
+    try{
+        instalarCapturaFinalizacaoRelatorio();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR FINALIZAÇÃO:",
+            err
+        );
+    }
+
+    // Fallback para a mensagem AJAX "Atendimento finalizado com sucesso".
+    try{
+        instalarMonitorSucessoFinalizacao();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR MONITOR DE SUCESSO:",
+            err
+        );
+    }
+
+    // Funcionalidades que já existiam no script original.
     iniciarObserver();
 
     setTimeout(iniciarReceituario,1500);
