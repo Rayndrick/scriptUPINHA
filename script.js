@@ -2133,91 +2133,22 @@ function salvarClassificacaoCache(nome,classificacao){
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // ESTRUTURA CONFIRMADA NOS TESTES DO CELK (12/08/2026):
-    // índice 3 = célula da classificação (icon32 ball-cor)
-    // índice 4 = célula do paciente/nome
-    // Não usar cells_4/cells_5 como regra principal, pois essa numeração
-    // varia conforme a tela/estrutura Wicket.
-    const celulas = Array.from(tr.querySelectorAll("td,th"));
+    // Estrutura observada no CELK: a bolinha fica em cells_4 e o nome
+    // imediatamente na célula cells_5. Usa isso antes dos fallbacks genéricos.
+    const bolaCelula = tr.querySelector('td[wicketpath*="_cells_4_cell"]');
+    const nomeCelula = tr.querySelector('td[wicketpath*="_cells_5_cell"]');
 
-    const seletoresBola =
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],' +
-        '[class~="ball-green"],[class~="ball-blue"]';
-
-    // 1) Estrutura exata confirmada pelo teste do usuário.
-    const bolaCelula = celulas[3] || null;
-    const nomeCelula = celulas[4] || null;
-    const bolaExata = bolaCelula && bolaCelula.querySelector(seletoresBola);
-
-    if(bolaExata && nomeCelula){
-        const nome = String(
-            nomeCelula.innerText || nomeCelula.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bolaExata);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            return {nome, classificacao};
-        }
-    }
-
-    // 2) Fallback por wicketpath, caso o CELK mude a estrutura.
-    const bolaCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_3_cell"]'
-    );
-    const nomeCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
+    const bola = bolaCelula && bolaCelula.querySelector(
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
     );
 
-    const bolaWicket = bolaCelulaWicket &&
-        bolaCelulaWicket.querySelector(seletoresBola);
-
-    if(bolaWicket && nomeCelulaWicket){
-        const nome = String(
-            nomeCelulaWicket.innerText ||
-            nomeCelulaWicket.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bolaWicket);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
+    if(bola && nomeCelula){
+        const nome = String(nomeCelula.innerText || nomeCelula.textContent || "")
+            .replace(/\s+/g," ").trim();
+        const classificacao = classeParaClassificacao(bola);
+        if(nome && pareceNomePaciente(nome) && classificacao !== "NÃO IDENTIFICADA"){
             return {nome, classificacao};
         }
-    }
-
-    // 3) Fallback genérico: encontra a bolinha e procura a célula de nome.
-    const bola = tr.querySelector(seletoresBola);
-
-    if(!bola) return null;
-
-    const classificacao = classeParaClassificacao(bola);
-    if(classificacao === "NÃO IDENTIFICADA") return null;
-
-    const indiceBola = celulas.indexOf(bola.closest("td,th"));
-
-    // Normalmente o nome vem imediatamente depois da classificação.
-    for(let i = Math.max(0, indiceBola + 1); i < celulas.length; i++){
-        const nome = String(
-            celulas[i].innerText || celulas[i].textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        if(pareceNomePaciente(nome)){
-            return {nome, classificacao};
-        }
-    }
-
-    // Último fallback: usa o extrator genérico já existente.
-    const nome = nomeDaLinha(tr);
-    if(nome){
-        return {nome, classificacao};
     }
 
     return null;
@@ -2420,7 +2351,7 @@ function obterClassificacao(nomePaciente){
 }
 
 // --------------------------------------------------
-// RELATÓRIO DO PLANTÃO — V39
+// RELATÓRIO DO PLANTÃO — V38
 // PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
 // --------------------------------------------------
 // A lógica abaixo mantém o paciente no relatório assim que ele é
@@ -2497,6 +2428,24 @@ function salvarListaRelatorio(lista){
         "celk_relatorio",
         JSON.stringify(lista)
     );
+
+    // Atualiza imediatamente uma janela de relatório já aberta.
+    // O relatório continua funcionando mesmo se for aberto depois,
+    // pois os dados também permanecem no localStorage.
+    try{
+        if(
+            window.celkRelatorioWindow &&
+            !window.celkRelatorioWindow.closed
+        ){
+            window.celkRelatorioWindow.postMessage(
+                {
+                    tipo:"CELK_RELATORIO_ATUALIZAR",
+                    lista:lista
+                },
+                "*"
+            );
+        }
+    }catch(_){}
 }
 
 function atualizarClassificacaoNoRelatorio(nome,classificacao){
@@ -2568,6 +2517,54 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
         return false;
     }
 
+    /*
+     * CORREÇÃO V40:
+     * Alguns caminhos do Helper chamam o pré-registro somente com
+     * nome/idade/chegada. Nesse caso, a classificação NÃO pode ficar
+     * definitivamente como "NÃO IDENTIFICADA".
+     *
+     * Primeiro usa o cache capturado antes da navegação. Se ainda não
+     * existir, tenta localizar a bolinha diretamente na tabela atual.
+     */
+    let classificacaoResolvida =
+        String(classificacao || "").trim();
+
+    if(
+        !classificacaoResolvida ||
+        classificacaoResolvida === "NÃO IDENTIFICADA"
+    ){
+        try{
+            const cache =
+                obterClassificacaoDoCache(nome);
+
+            if(cache && cache !== "NÃO IDENTIFICADA"){
+                classificacaoResolvida = cache;
+            }
+        }catch(_){}
+    }
+
+    if(
+        (!classificacaoResolvida ||
+         classificacaoResolvida === "NÃO IDENTIFICADA")
+        &&
+        document.querySelector("table")
+    ){
+        try{
+            const encontrada = obterClassificacao(nome);
+
+            if(
+                encontrada &&
+                encontrada !== "NÃO IDENTIFICADA"
+            ){
+                classificacaoResolvida = encontrada;
+            }
+        }catch(_){}
+    }
+
+    if(!classificacaoResolvida){
+        classificacaoResolvida = "NÃO IDENTIFICADA";
+    }
+
     const lista = obterListaRelatorio();
 
     let paciente = localizarPacienteNoRelatorio(
@@ -2581,8 +2578,7 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
             numero: lista.length + 1,
             nome: nome,
             idade: String(idade || "").trim(),
-            classificacao:
-                classificacao || "NÃO IDENTIFICADA",
+            classificacao: classificacaoResolvida,
             chegada: String(chegada || "").trim(),
             atendido: "",
             tempo: ""
@@ -2601,20 +2597,22 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
         }
 
         if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA"
+            classificacaoResolvida &&
+            classificacaoResolvida !== "NÃO IDENTIFICADA"
         ){
-            paciente.classificacao = classificacao;
+            paciente.classificacao = classificacaoResolvida;
         }
     }
 
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V39] PACIENTE PRÉ-REGISTRADO:",
+        "[CELK RELATÓRIO V40] PACIENTE PRÉ-REGISTRADO:",
         paciente.nome,
         "=>",
-        paciente.classificacao
+        paciente.classificacao,
+        "| CHEGADA:",
+        paciente.chegada
     );
 
     return true;
@@ -2626,12 +2624,29 @@ function salvarPacientePendente(
     chegada,
     classificacao
 ){
+    let classificacaoResolvida =
+        String(classificacao || "").trim();
+
+    if(
+        !classificacaoResolvida ||
+        classificacaoResolvida === "NÃO IDENTIFICADA"
+    ){
+        try{
+            const cache =
+                obterClassificacaoDoCache(nome);
+
+            if(cache && cache !== "NÃO IDENTIFICADA"){
+                classificacaoResolvida = cache;
+            }
+        }catch(_){}
+    }
+
     const dados = {
         nome: String(nome || "").trim(),
         idade: String(idade || "").trim(),
         chegada: String(chegada || "").trim(),
         classificacao:
-            classificacao || "NÃO IDENTIFICADA",
+            classificacaoResolvida || "NÃO IDENTIFICADA",
         salvoEm: Date.now()
     };
 
@@ -2660,7 +2675,7 @@ function salvarPacientePendente(
     );
 
     console.log(
-        "[CELK RELATÓRIO V39] PRÉ-REGISTRO:",
+        "[CELK RELATÓRIO V40] PRÉ-REGISTRO:",
         dados.nome,
         "=>",
         dados.classificacao
@@ -2756,7 +2771,7 @@ function registrarFinalizacaoRelatorio(){
 
     if(!dados || !dados.nome){
         console.warn(
-            "[CELK RELATÓRIO V39] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
+            "[CELK RELATÓRIO V40] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
         return false;
     }
@@ -2835,7 +2850,7 @@ function registrarFinalizacaoRelatorio(){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V39] FINALIZAÇÃO REGISTRADA:",
+        "[CELK RELATÓRIO V40] FINALIZAÇÃO REGISTRADA:",
         paciente.nome,
         "=>",
         paciente.classificacao,
@@ -2864,75 +2879,170 @@ function instalarCapturaFinalizacaoRelatorio(){
 
     window.celk.finalizacaoRelatorioHook = true;
 
+    function elementoFinalizacaoDoEvento(evento){
+
+        const candidatos = [];
+
+        try{
+            if(
+                evento &&
+                evento.target &&
+                evento.target.closest
+            ){
+                const alvo = evento.target;
+
+                const seletores = [
+                    "a.btn-finalizar-prontuario",
+                    "a",
+                    "button",
+                    "input",
+                    "[role='button']",
+                    "[onclick]"
+                ];
+
+                for(const seletor of seletores){
+                    try{
+                        const el = alvo.closest(seletor);
+                        if(el) candidatos.push(el);
+                    }catch(_){}
+                }
+            }
+        }catch(_){}
+
+        try{
+            if(
+                evento &&
+                typeof evento.composedPath === "function"
+            ){
+                for(const el of evento.composedPath()){
+                    if(
+                        el &&
+                        el.nodeType === 1
+                    ){
+                        candidatos.push(el);
+                    }
+                }
+            }
+        }catch(_){}
+
+        const unicos = [...new Set(candidatos)];
+
+        return unicos.find(function(el){
+
+            const texto = normalizarCelk(
+                el.innerText ||
+                el.value ||
+                el.getAttribute("title") ||
+                el.getAttribute("alt") ||
+                el.getAttribute("aria-label") ||
+                ""
+            );
+
+            const id = normalizarCelk(
+                el.id || ""
+            );
+
+            const classe = normalizarCelk(
+                el.className || ""
+            );
+
+            /*
+             * Seletor confirmado anteriormente no CELK:
+             * a.btn-finalizar-prontuario
+             */
+            if(
+                el.matches &&
+                el.matches("a.btn-finalizar-prontuario")
+            ){
+                return true;
+            }
+
+            return (
+                id.includes("BTNFINALIZARPRONTUARIO") ||
+                id.includes("FINALIZARPRONTUARIO") ||
+                classe.includes("BTN FINALIZAR PRONTUARIO") ||
+                classe.includes("BTN-FINALIZAR-PRONTUARIO") ||
+                texto.includes("SALVAR ATENDIMENTO") ||
+                texto.includes("SALVAR O ATENDIMENTO") ||
+                texto.includes("FINALIZAR PRONTUARIO") ||
+                texto.includes("FINALIZAR ATENDIMENTO")
+            );
+        }) || null;
+    }
+
     const capturarFinalizacao = function(evento){
 
         try{
 
             const alvo =
-                evento.target &&
-                evento.target.closest
-                    ? evento.target.closest(
-                        "a,button,input"
-                    )
-                    : null;
+                elementoFinalizacaoDoEvento(evento);
 
             if(!alvo){
                 return;
             }
 
-            const texto = normalizarCelk(
-                alvo.innerText ||
-                alvo.value ||
-                alvo.getAttribute("title") ||
-                alvo.getAttribute("alt") ||
-                ""
-            );
+            /*
+             * mousedown + click podem ocorrer no mesmo botão.
+             * Registramos somente uma vez por clique.
+             */
+            const agoraMs = Date.now();
 
-            const id = normalizarCelk(
-                alvo.id || ""
-            );
-
-            const classe = normalizarCelk(
-                alvo.className || ""
-            );
-
-            const ehFinalizacao =
-                id.includes(
-                    "BTNFINALIZARPRONTUARIO"
-                ) ||
-                classe.includes(
-                    "BTN FINALIZAR PRONTUARIO"
-                ) ||
-                texto.includes(
-                    "SALVAR ATENDIMENTO"
-                ) ||
-                texto.includes(
-                    "SALVAR O ATENDIMENTO"
-                ) ||
-                texto.includes(
-                    "FINALIZAR PRONTUARIO"
-                ) ||
-                texto.includes(
-                    "FINALIZAR ATENDIMENTO"
-                );
-
-            if(!ehFinalizacao){
+            if(
+                window.celk.ultimaCapturaFinalizacao &&
+                agoraMs -
+                window.celk.ultimaCapturaFinalizacao < 1200
+            ){
                 return;
             }
 
-            // Apenas registrar; NÃO impedir o clique do CELK.
-            registrarFinalizacaoRelatorio();
+            window.celk.ultimaCapturaFinalizacao =
+                agoraMs;
+
+            console.log(
+                "[CELK RELATÓRIO V40] FINALIZAÇÃO DETECTADA:",
+                {
+                    tag: alvo.tagName,
+                    id: alvo.id || "",
+                    classe: String(alvo.className || ""),
+                    texto:
+                        alvo.innerText ||
+                        alvo.value ||
+                        alvo.getAttribute("title") ||
+                        ""
+                }
+            );
+
+            // Registra ANTES do CELK executar o próprio onclick/navegação.
+            const sucesso =
+                registrarFinalizacaoRelatorio();
+
+            console.log(
+                "[CELK RELATÓRIO V40] REGISTRO DE FINALIZAÇÃO:",
+                sucesso ? "OK" : "FALHOU"
+            );
 
         }catch(err){
 
             console.error(
-                "[CELK RELATÓRIO V39] ERRO NA CAPTURA DA FINALIZAÇÃO:",
+                "[CELK RELATÓRIO V40] ERRO NA CAPTURA DA FINALIZAÇÃO:",
                 err
             );
 
         }
 
     };
+
+    /*
+     * Capture em três fases:
+     * - pointerdown: cobre mouse/touch
+     * - mousedown: garante captura antes do onclick do Wicket
+     * - click: segunda camada de segurança
+     */
+    document.addEventListener(
+        "pointerdown",
+        capturarFinalizacao,
+        true
+    );
 
     document.addEventListener(
         "mousedown",
@@ -2947,7 +3057,7 @@ function instalarCapturaFinalizacaoRelatorio(){
     );
 
     console.log(
-        "[CELK RELATÓRIO V39] CAPTURA DE FINALIZAÇÃO INSTALADA."
+        "[CELK RELATÓRIO V40] CAPTURA DE FINALIZAÇÃO INSTALADA."
     );
 }
 
@@ -6159,7 +6269,7 @@ document
     aba.document.close();
 
     console.log(
-        "[CELK RELATÓRIO V39] RELATÓRIO ABERTO:",
+        "[CELK RELATÓRIO V40] RELATÓRIO ABERTO:",
         pacientes.length,
         "pacientes"
     );
