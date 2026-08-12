@@ -2394,20 +2394,87 @@ function extrairDadosLinhaPaciente(tr){
 }
 
 function salvarPacientePendente(nome, idade, chegada, classificacao){
+    const novoNome = String(nome || "").trim();
+    if(!novoNome || novoNome === "Não encontrado") return;
+
+    let anterior = null;
+    try{
+        anterior = JSON.parse(localStorage.getItem("celk_paciente_pendente") || "null");
+    }catch(_){ }
+
     const dados = {
-        nome: String(nome || "").trim(),
-        idade: String(idade || "").trim(),
-        chegada: String(chegada || "").trim(),
-        classificacao: classificacao || "NÃO IDENTIFICADA",
+        nome: novoNome,
+        idade: String(idade || (anterior && anterior.nome === novoNome ? anterior.idade : "")).trim(),
+        chegada: String(chegada || (anterior && anterior.nome === novoNome ? anterior.chegada : "")).trim(),
+        classificacao: (classificacao && classificacao !== "NÃO IDENTIFICADA")
+            ? classificacao
+            : ((anterior && anterior.nome === novoNome && anterior.classificacao)
+                ? anterior.classificacao
+                : "NÃO IDENTIFICADA"),
         salvoEm: Date.now()
     };
 
-    if(!dados.nome || dados.nome === "Não encontrado") return;
-
     try{
         localStorage.setItem("celk_paciente_pendente", JSON.stringify(dados));
-        console.log("[CELK Helper V34] PACIENTE PRÉ-REGISTRADO:", dados.nome, "=>", dados.classificacao);
+        console.log("[CELK Helper V34] PACIENTE PRÉ-REGISTRADO:", dados.nome, "=>", dados.classificacao, "| CHEGADA:", dados.chegada);
     }catch(_){ }
+}
+
+// --------------------------------------------------
+// CAPTURA AUTOMÁTICA DO PACIENTE QUE ESTÁ NO PRONTUÁRIO
+// --------------------------------------------------
+// Não depende do botão Atendimento. O CELK pode abrir o prontuário
+// diretamente e, nesse caso, o paciente ainda precisa ficar armazenado
+// para que o clique em Salvar/Finalizar consiga registrá-lo no relatório.
+function capturarPacienteAtualAutomaticamente(){
+    try{
+        const tela = document.body.innerText || "";
+
+        const cab = tela.match(
+            /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]{2,})\s*\|\s*([^|]+)\s*\|\s*DN:/i
+        );
+
+        if(!cab) return false;
+
+        const nome = cab[1].replace(/\s+/g," ").trim();
+        const idade = cab[2].replace(/\s+/g," ").trim();
+
+        if(!nome || nome.length < 3) return false;
+
+        let chegada = "";
+
+        const mTriagem = tela.match(
+            /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{1,2}:\d{2})/i
+        );
+
+        if(mTriagem) chegada = mTriagem[1];
+
+        if(!chegada){
+            const mChegada = tela.match(
+                /(?:CHEGADA|ENTRADA)[^\d]{0,60}(\d{1,2}:\d{2})/i
+            );
+            if(mChegada) chegada = mChegada[1];
+        }
+
+        let classificacao = obterClassificacaoDoCache(nome);
+
+        if(classificacao === "NÃO IDENTIFICADA"){
+            try{
+                classificacao = obterClassificacao(nome);
+            }catch(_){ }
+        }
+
+        salvarPacientePendente(nome, idade, chegada, classificacao);
+
+        window.celk._pacienteAtualDetectado = {
+            nome, idade, chegada, classificacao, detectadoEm: Date.now()
+        };
+
+        return true;
+    }catch(err){
+        console.warn("[CELK Helper V34] Falha ao capturar paciente atual:", err);
+        return false;
+    }
 }
 
 function registrarPacienteEmAtendimento(nome, idade, chegada){
@@ -2534,6 +2601,10 @@ function instalarCapturaFinalizacaoRelatorio(){
                 texto.includes("FINALIZAR ATENDIMENTO");
 
             if(!ehFinalizacao) return;
+
+            // Antes de registrar, tenta uma última vez capturar o prontuário
+            // que está aberto. Isso evita depender do clique anterior no paciente.
+            try{ capturarPacienteAtualAutomaticamente(); }catch(_){ }
 
             // CAPTURE = executa antes do onclick do CELK e antes da navegação.
             window.celk._finalizacaoEmAndamento = true;
@@ -6820,15 +6891,51 @@ function iniciarObserver(){
 
 }
 
+    // --------------------------------------------------
+    // INICIALIZAÇÃO FINAL — V34 CORRIGIDA
+    // --------------------------------------------------
+    // Havia uma segunda atribuição de window.celk.init no final do arquivo
+    // que sobrescrevia a primeira e, com isso, os hooks do relatório não eram
+    // instalados. Aqui reunimos TODOS os inicializadores em uma única função.
     window.celk.init = function(){
 
-    criarInterface();
+        criarInterface();
 
-    iniciarObserver();
+        // Captura classificação antes de o CELK remover a linha.
+        instalarCapturaAntecipadaClassificacao();
 
-    setTimeout(iniciarReceituario,1500);
+        // Alimenta o cache das pulseiras já presentes na lista.
+        try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
 
-};
+        // Captura o clique real de Salvar/Finalizar antes da navegação.
+        instalarCapturaFinalizacaoRelatorio();
+
+        // Mantém o restante do Helper funcionando.
+        iniciarObserver();
+
+        // Captura automaticamente quem estiver com o prontuário aberto.
+        setTimeout(function(){
+            try{ capturarPacienteAtualAutomaticamente(); }catch(_){ }
+        },500);
+
+        setTimeout(iniciarReceituario,1500);
+
+        if(window.celk.intervalo) return;
+
+        window.celk.intervalo = setInterval(function(){
+
+            if(!document.getElementById("celk-helper")){
+                console.log("[CELK Helper V34] Barra recriada.");
+                criarInterface();
+            }
+
+            try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+
+            // Se houver prontuário aberto, mantém o paciente atual salvo.
+            try{ capturarPacienteAtualAutomaticamente(); }catch(_){ }
+
+        },1000);
+    };
 
 window.celk.init();
 
@@ -7714,3 +7821,4 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
+        
