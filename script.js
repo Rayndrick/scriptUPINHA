@@ -1,8 +1,8 @@
 // =========================================================
-// CELK HELPER — V32
+// CELK HELPER — V34
 // ATESTADO: fluxo direto pelo botão "Novo Documento"
 // =========================================================
-console.log("[CELK Helper V32] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+console.log("[CELK Helper V34] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
 
 (function () {
 
@@ -10,7 +10,7 @@ console.log("[CELK Helper V32] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS
 
 window.celk = window.celk || {};
 
-window.celk.version = "1.0";
+window.celk.version = "1.0-V34";
 
 if (window.celk.running) {
 
@@ -34,13 +34,50 @@ const CONFIG = {
 
 const hoje = new Date().toLocaleDateString("pt-BR");
 
-if(localStorage.getItem("celk_relatorio_data") !== hoje){
-
-    localStorage.setItem("celk_relatorio_data", hoje);
-
-    localStorage.setItem("celk_relatorio","[]");
-
+// --------------------------------------------------
+// RELATÓRIO POR DIA — NÃO APAGA OS DIAS ANTERIORES
+// --------------------------------------------------
+function obterRelatoriosPorData(){
+    try{
+        const x = JSON.parse(localStorage.getItem("celk_relatorios_por_data") || "{}");
+        return (x && typeof x === "object" && !Array.isArray(x)) ? x : {};
+    }catch(_){ return {}; }
 }
+
+function salvarRelatoriosPorData(obj){
+    localStorage.setItem("celk_relatorios_por_data", JSON.stringify(obj));
+}
+
+function obterListaRelatorioHoje(){
+    const todos = obterRelatoriosPorData();
+    return Array.isArray(todos[hoje]) ? todos[hoje] : [];
+}
+
+function salvarListaRelatorioHoje(lista){
+    const todos = obterRelatoriosPorData();
+    todos[hoje] = Array.isArray(lista) ? lista : [];
+    salvarRelatoriosPorData(todos);
+    // Mantém também esta chave por compatibilidade com partes antigas do Helper.
+    localStorage.setItem("celk_relatorio", JSON.stringify(todos[hoje]));
+    localStorage.setItem("celk_relatorio_data", hoje);
+}
+
+// Migra dados antigos sem apagá-los.
+(function migrarRelatorioAntigo(){
+    const todos = obterRelatoriosPorData();
+    const dataAnterior = localStorage.getItem("celk_relatorio_data");
+    let antigo = [];
+    try{ antigo = JSON.parse(localStorage.getItem("celk_relatorio") || "[]"); }catch(_){ antigo=[]; }
+
+    if(dataAnterior && Array.isArray(antigo) && antigo.length && !todos[dataAnterior]){
+        todos[dataAnterior] = antigo;
+    }
+
+    if(!todos[hoje]) todos[hoje] = [];
+    salvarRelatoriosPorData(todos);
+    localStorage.setItem("celk_relatorio", JSON.stringify(todos[hoje]));
+    localStorage.setItem("celk_relatorio_data", hoje);
+})();
 
 let refreshTimer=null;
     //--------------------------------------------------
@@ -481,7 +518,7 @@ atestado.onclick=function(e){
     abrirMenuAtestado();
 };
 
-console.log("📜 [CELK Helper V32] Botão ATESTADO criado.");
+console.log("📜 [CELK Helper V34] Botão ATESTADO criado.");
 
 //--------------------------------------------------
 // BOTÃO DECLARAÇÃO
@@ -530,7 +567,7 @@ declaracao.onclick=function(e){
     abrirMenuDeclaracao();
 };
 
-console.log("📄 [CELK Helper V32] Botão DECLARAÇÃO criado.");
+console.log("📄 [CELK Helper V34] Botão DECLARAÇÃO criado.");
 
 //--------------------------------------------------
 // BOTÃO NEWS
@@ -782,7 +819,7 @@ function preencherEvolucaoEvasaoFinal(){
             );
 
             console.error(
-                "[CELK Helper V32] EVASÃO: editor da evolução não encontrado."
+                "[CELK Helper V34] EVASÃO: editor da evolução não encontrado."
             );
 
             return false;
@@ -821,7 +858,7 @@ function preencherEvolucaoEvasaoFinal(){
         }catch(_){}
 
         console.log(
-            "[CELK Helper V32] EVASÃO: texto inserido na evolução."
+            "[CELK Helper V34] EVASÃO: texto inserido na evolução."
         );
 
         return true;
@@ -829,7 +866,7 @@ function preencherEvolucaoEvasaoFinal(){
     }catch(err){
 
         console.error(
-            "[CELK Helper V32] EVASÃO: erro ao preencher evolução.",
+            "[CELK Helper V34] EVASÃO: erro ao preencher evolução.",
             err
         );
 
@@ -929,7 +966,7 @@ async function selecionarEvasaoFinal(timeout){
                 );
 
                 console.log(
-                    "[CELK Helper V32] EVASÃO SELECIONADA:",
+                    "[CELK Helper V34] EVASÃO SELECIONADA:",
                     select.value,
                     opcao.textContent.trim()
                 );
@@ -944,7 +981,7 @@ async function selecionarEvasaoFinal(timeout){
     }
 
     console.error(
-        "[CELK Helper V32] EVASÃO: select/opção não encontrada."
+        "[CELK Helper V34] EVASÃO: select/opção não encontrada."
     );
 
     return false;
@@ -996,7 +1033,7 @@ async function executarEvasaoFinal(){
 
     if(window.celkEvasaoExecutando){
         console.log(
-            "[CELK Helper V32] EVASÃO já está em execução."
+            "[CELK Helper V34] EVASÃO já está em execução."
         );
         return;
     }
@@ -1019,7 +1056,7 @@ async function executarEvasaoFinal(){
     try{
 
         console.log(
-            "[CELK Helper V32] EVASÃO: iniciando fluxo..."
+            "[CELK Helper V34] EVASÃO: iniciando fluxo..."
         );
 
         // 1 — Evolução.
@@ -1074,7 +1111,7 @@ async function executarEvasaoFinal(){
         if(!evasaoMantida){
 
             console.warn(
-                "[CELK Helper V32] EVASÃO não permaneceu selecionada."
+                "[CELK Helper V34] EVASÃO não permaneceu selecionada."
             );
 
             if(!await selecionarEvasaoFinal(5000)){
@@ -1097,7 +1134,7 @@ async function executarEvasaoFinal(){
         if(!finalizar){
 
             console.error(
-                "[CELK Helper V32] Botão Salvar Atendimento não encontrado."
+                "[CELK Helper V34] Botão Salvar Atendimento não encontrado."
             );
 
             alert(
@@ -1110,11 +1147,11 @@ async function executarEvasaoFinal(){
         }
 
         console.log(
-            "[CELK Helper V32] EVASÃO: todas as etapas prontas."
+            "[CELK Helper V34] EVASÃO: todas as etapas prontas."
         );
 
         console.log(
-            "[CELK Helper V32] EVASÃO: clicando em Salvar Atendimento..."
+            "[CELK Helper V34] EVASÃO: clicando em Salvar Atendimento..."
         );
 
         // 7 — FINALIZA.
@@ -1123,7 +1160,7 @@ async function executarEvasaoFinal(){
     }catch(err){
 
         console.error(
-            "[CELK Helper V32] EVASÃO: erro no fluxo.",
+            "[CELK Helper V34] EVASÃO: erro no fluxo.",
             err
         );
 
@@ -1357,7 +1394,7 @@ function criarBotaoAtestadoRobusto(){
             abrirMenuAtestado();
         }else{
             console.error(
-                "[CELK Helper V32] função abrirMenuAtestado não encontrada."
+                "[CELK Helper V34] função abrirMenuAtestado não encontrada."
             );
         }
     };
@@ -1369,7 +1406,7 @@ function criarBotaoAtestadoRobusto(){
     );
 
     console.log(
-        "📜 [CELK Helper V32] ATESTADO inserido após CID."
+        "📜 [CELK Helper V34] ATESTADO inserido após CID."
     );
 
     return true;
@@ -1702,7 +1739,7 @@ function preencherEvolucao(opcoes = {}){
 
         }catch(e){
             console.warn(
-                "[CELK Helper V32] erro ao localizar triagem no histórico:",
+                "[CELK Helper V34] erro ao localizar triagem no histórico:",
                 e
             );
         }
@@ -2121,7 +2158,7 @@ function salvarClassificacaoCache(nome,classificacao){
     cache[nome]=classificacao;
     localStorage.setItem("celk_classificacoes_cache",JSON.stringify(cache));
 
-    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    console.log("[CELK Helper V34] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
@@ -2241,7 +2278,13 @@ function instalarCapturaAntecipadaClassificacao(){
                 const exata = nomeClassificacaoPorEstruturaCELK(alvo);
                 if(exata){
                     salvarClassificacaoCache(exata.nome, exata.classificacao);
-                    salvarPacientePendente(exata.nome, "", "", exata.classificacao);
+                    const dadosLinha = extrairDadosLinhaPaciente(alvo);
+                    salvarPacientePendente(
+                        exata.nome,
+                        dadosLinha.idade,
+                        dadosLinha.chegada,
+                        exata.classificacao
+                    );
                 }
             }
 
@@ -2316,7 +2359,7 @@ function obterClassificacao(nomePaciente){
     const cache=obterClassificacaoDoCache(nome);
     if(cache!=="NÃO IDENTIFICADA") return cache;
 
-    console.warn("[CELK Helper V32] CLASSIFICAÇÃO NÃO ENCONTRADA:",nome);
+    console.warn("[CELK Helper V34] CLASSIFICAÇÃO NÃO ENCONTRADA:",nome);
     return "NÃO IDENTIFICADA";
 }
 
@@ -2326,6 +2369,29 @@ function obterClassificacao(nomePaciente){
 // A classificação é capturada na tabela ANTES de o CELK remover o paciente.
 // O horário "Atendido" e o tempo só são gravados quando o botão real de
 // finalização é clicado.
+
+function extrairDadosLinhaPaciente(tr){
+    if(!tr) return {idade:"", chegada:""};
+
+    const celulas = Array.from(tr.querySelectorAll("td"));
+    let idade = "";
+    let chegada = "";
+
+    // Pela tabela mostrada no DevTools: após o nome vêm idade, tempo e chegada.
+    for(const td of celulas){
+        const txt = String(td.innerText || td.textContent || "")
+            .replace(/\s+/g," ").trim();
+        if(!txt) continue;
+        if(!idade && /\b(?:\d+\s+(?:anos?|meses?|dias?)|\d+\s+anos?\s+e\s+\d+\s+meses?)\b/i.test(txt)){
+            idade = txt;
+            continue;
+        }
+        const m = txt.match(/(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{1,2}:\d{2})/);
+        if(m && !chegada) chegada = m[1];
+    }
+
+    return {idade, chegada};
+}
 
 function salvarPacientePendente(nome, idade, chegada, classificacao){
     const dados = {
@@ -2340,7 +2406,7 @@ function salvarPacientePendente(nome, idade, chegada, classificacao){
 
     try{
         localStorage.setItem("celk_paciente_pendente", JSON.stringify(dados));
-        console.log("[CELK Helper V33] PACIENTE PRÉ-REGISTRADO:", dados.nome, "=>", dados.classificacao);
+        console.log("[CELK Helper V34] PACIENTE PRÉ-REGISTRADO:", dados.nome, "=>", dados.classificacao);
     }catch(_){ }
 }
 
@@ -2398,9 +2464,7 @@ function registrarFinalizacaoRelatorio(){
         tempo = minutos + " min";
     }
 
-    let lista=[];
-    try{ lista=JSON.parse(localStorage.getItem("celk_relatorio")||"[]"); }
-    catch(_){ lista=[]; }
+    let lista = obterListaRelatorioHoje();
 
     // Evita duplicar o mesmo atendimento.
     let existente = lista.find(function(p){
@@ -2434,9 +2498,9 @@ function registrarFinalizacaoRelatorio(){
 
     // Renumera para não deixar buracos.
     lista.forEach(function(p,i){ p.numero=i+1; });
-    localStorage.setItem("celk_relatorio", JSON.stringify(lista));
+    salvarListaRelatorioHoje(lista);
 
-    console.log("[CELK Helper V33] FINALIZAÇÃO REGISTRADA:", dados.nome, "=>", dados.classificacao, "|", atendido, "|", tempo);
+    console.log("[CELK Helper V34] FINALIZAÇÃO REGISTRADA:", dados.nome, "=>", dados.classificacao, "|", atendido, "|", tempo);
 
     try{ localStorage.removeItem("celk_paciente_pendente"); }catch(_){ }
     return true;
@@ -2448,6 +2512,7 @@ function instalarCapturaFinalizacaoRelatorio(){
 
     const capturarFinalizacao = function(evento){
         try{
+            if(window.celk._finalizacaoEmAndamento) return;
             const alvo = evento.target && evento.target.closest
                 ? evento.target.closest("a,button,input")
                 : null;
@@ -2461,6 +2526,7 @@ function instalarCapturaFinalizacaoRelatorio(){
 
             const ehFinalizacao =
                 id.includes("BTNFINALIZARPRONTUARIO") ||
+                id.includes("BTNSALVARATENDIMENTO") ||
                 classe.includes("BTN FINALIZAR PRONTUARIO") ||
                 texto.includes("SALVAR ATENDIMENTO") ||
                 texto.includes("SALVAR O ATENDIMENTO") ||
@@ -2470,9 +2536,11 @@ function instalarCapturaFinalizacaoRelatorio(){
             if(!ehFinalizacao) return;
 
             // CAPTURE = executa antes do onclick do CELK e antes da navegação.
+            window.celk._finalizacaoEmAndamento = true;
             registrarFinalizacaoRelatorio();
+            setTimeout(function(){ window.celk._finalizacaoEmAndamento = false; }, 1500);
         }catch(err){
-            console.error("[CELK Helper V33] erro ao registrar finalização:", err);
+            console.error("[CELK Helper V34] erro ao registrar finalização:", err);
         }
     };
 
@@ -2481,7 +2549,7 @@ function instalarCapturaFinalizacaoRelatorio(){
 }
 
 function adicionarRelatorio(nome, idade, chegada, classificacao){
-    const lista=JSON.parse(localStorage.getItem("celk_relatorio")||"[]");
+    const lista=obterListaRelatorioHoje();
 
     const existente=lista.find(p=>p.nome===nome && p.chegada===chegada);
 
@@ -2489,7 +2557,7 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
         if(classificacao && classificacao!=="NÃO IDENTIFICADA" &&
            (!existente.classificacao || existente.classificacao==="NÃO IDENTIFICADA")){
             existente.classificacao=classificacao;
-            localStorage.setItem("celk_relatorio",JSON.stringify(lista));
+            salvarListaRelatorioHoje(lista);
         }
 
         if(!classificacao || classificacao==="NÃO IDENTIFICADA"){
@@ -2521,7 +2589,7 @@ function adicionarRelatorio(nome, idade, chegada, classificacao){
         tempo
     });
 
-    localStorage.setItem("celk_relatorio",JSON.stringify(lista));
+    salvarListaRelatorioHoje(lista);
 
     if(!classificacao || classificacao==="NÃO IDENTIFICADA"){
         agendarAtualizacaoClassificacaoRelatorio(nome,chegada);
@@ -2536,14 +2604,14 @@ function agendarAtualizacaoClassificacaoRelatorio(nome,chegada){
             const classificacao=obterClassificacao(nome);
             if(!classificacao || classificacao==="NÃO IDENTIFICADA") return;
 
-            const lista=JSON.parse(localStorage.getItem("celk_relatorio")||"[]");
+            const lista=obterListaRelatorioHoje();
             const paciente=lista.find(p=>p.nome===nome && p.chegada===chegada);
             if(!paciente) return;
 
             if(paciente.classificacao!==classificacao){
                 paciente.classificacao=classificacao;
-                localStorage.setItem("celk_relatorio",JSON.stringify(lista));
-                console.log("[CELK Helper V32] CLASSIFICAÇÃO CORRIGIDA:",nome,"=>",classificacao);
+                salvarListaRelatorioHoje(lista);
+                console.log("[CELK Helper V34] CLASSIFICAÇÃO CORRIGIDA:",nome,"=>",classificacao);
             }
         },delay);
     });
@@ -2876,7 +2944,7 @@ function definirConteudoEditorDeclaracao(elemento, html){
     }catch(e){
 
         console.error(
-            "[CELK Helper V32] Erro ao preencher declaração:",
+            "[CELK Helper V34] Erro ao preencher declaração:",
             e
         );
 
@@ -2975,7 +3043,7 @@ async function prepararDeclaracao(acompanhante){
     try{
 
         console.log(
-            "[CELK Helper V32] INICIANDO DECLARAÇÃO:",
+            "[CELK Helper V34] INICIANDO DECLARAÇÃO:",
             acompanhante ? "ACOMPANHANTE" : "PACIENTE",
             dados
         );
@@ -3180,14 +3248,14 @@ async function prepararDeclaracao(acompanhante){
         }
 
         console.log(
-            "[CELK Helper V32] DECLARAÇÃO PREENCHIDA:",
+            "[CELK Helper V34] DECLARAÇÃO PREENCHIDA:",
             acompanhante ? "ACOMPANHANTE" : "PACIENTE"
         );
 
     }catch(e){
 
         console.error(
-            "[CELK Helper V32] ERRO NA DECLARAÇÃO:",
+            "[CELK Helper V34] ERRO NA DECLARAÇÃO:",
             e
         );
 
@@ -3482,7 +3550,7 @@ function abrirMenuAtestado(){
             botao.id === "celk-atestado-com-cid";
 
         console.log(
-            "[CELK Helper V32] Botão do Atestado clicado:",
+            "[CELK Helper V34] Botão do Atestado clicado:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -3501,7 +3569,7 @@ function abrirMenuAtestado(){
         }catch(err){
 
             console.error(
-                "[CELK Helper V32] erro no clique do Atestado:",
+                "[CELK Helper V34] erro no clique do Atestado:",
                 err
             );
 
@@ -3869,7 +3937,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
         if(alvos.length){
 
             console.log(
-                "[CELK Helper V32] ALVOS DO EDITOR DE ATESTADO:",
+                "[CELK Helper V34] ALVOS DO EDITOR DE ATESTADO:",
                 alvos.map(x => x.tipo)
             );
 
@@ -3886,7 +3954,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
                     if(ok){
 
                         console.log(
-                            "[CELK Helper V32] DIAS PREENCHIDOS NO DOCUMENTO:",
+                            "[CELK Helper V34] DIAS PREENCHIDOS NO DOCUMENTO:",
                             dias,
                             alvo.tipo
                         );
@@ -3935,7 +4003,7 @@ async function preencherDiasNoDocumento(dias, timeout=20000){
                 }catch(err){
 
                     console.warn(
-                        "[CELK Helper V32] Falha ao preencher alvo:",
+                        "[CELK Helper V34] Falha ao preencher alvo:",
                         alvo.tipo,
                         err
                     );
@@ -4032,14 +4100,14 @@ function fecharJanelasAuxiliaresAtestado(janelas){
                 janela.close();
 
                 console.log(
-                    "[CELK Helper V32] Aba/janela auxiliar do Atestado fechada."
+                    "[CELK Helper V34] Aba/janela auxiliar do Atestado fechada."
                 );
             }
 
         }catch(e){
 
             console.log(
-                "[CELK Helper V32] Não foi possível fechar a janela auxiliar:",
+                "[CELK Helper V34] Não foi possível fechar a janela auxiliar:",
                 e
             );
 
@@ -4067,7 +4135,7 @@ function aplicarLayoutAssinaturaAtestado(comCid){
 
     if(!alvos.length){
         console.warn(
-            "[CELK Helper V32] Não encontrei o editor para ajustar assinatura."
+            "[CELK Helper V34] Não encontrei o editor para ajustar assinatura."
         );
         return false;
     }
@@ -4406,7 +4474,7 @@ function aplicarLayoutAssinaturaAtestado(comCid){
     });
 
     console.log(
-        "[CELK Helper V32] Layout do Atestado ajustado:",
+        "[CELK Helper V34] Layout do Atestado ajustado:",
         comCid ? "COM CID" : "SEM CID",
         aplicado ? "OK" : "NÃO APLICADO"
     );
@@ -4436,7 +4504,7 @@ async function prepararAtestado(dias, comCid){
             janelasAtestado.push(janela);
 
             console.log(
-                "[CELK Helper V32] Janela auxiliar capturada."
+                "[CELK Helper V34] Janela auxiliar capturada."
             );
         }
 
@@ -4446,7 +4514,7 @@ async function prepararAtestado(dias, comCid){
     try{
 
         console.log(
-            "[CELK Helper V32] INICIANDO ATESTADO:",
+            "[CELK Helper V34] INICIANDO ATESTADO:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -4528,7 +4596,7 @@ async function prepararAtestado(dias, comCid){
             if(documentos){
 
                 console.log(
-                    "[CELK Helper V32] Abrindo aba DOCUMENTOS."
+                    "[CELK Helper V34] Abrindo aba DOCUMENTOS."
                 );
 
                 documentos.click();
@@ -4548,7 +4616,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V32] CLICANDO EM NOVO DOCUMENTO."
+            "[CELK Helper V34] CLICANDO EM NOVO DOCUMENTO."
         );
 
         // Captura janelas/abas abertas pelo CELK durante este clique.
@@ -4574,7 +4642,7 @@ async function prepararAtestado(dias, comCid){
         }
 
         console.log(
-            "[CELK Helper V32] MODAL MODELO DE DOCUMENTO ABERTO."
+            "[CELK Helper V34] MODAL MODELO DE DOCUMENTO ABERTO."
         );
 
         // --------------------------------------------------
@@ -4595,7 +4663,7 @@ async function prepararAtestado(dias, comCid){
             .toUpperCase();
 
         console.log(
-            "[CELK Helper V32] OPÇÕES DO MODELO:",
+            "[CELK Helper V34] OPÇÕES DO MODELO:",
             opcoes.map(o => ({ texto: o.textContent, valor: o.value }))
         );
 
@@ -4627,7 +4695,7 @@ async function prepararAtestado(dias, comCid){
         if(!opcao){
 
             console.error(
-                "[CELK Helper V32] MODELO NÃO ENCONTRADO. OPÇÕES:",
+                "[CELK Helper V34] MODELO NÃO ENCONTRADO. OPÇÕES:",
                 opcoes.map(o => ({ texto: o.textContent, valor: o.value }))
             );
 
@@ -4658,7 +4726,7 @@ async function prepararAtestado(dias, comCid){
         );
 
         console.log(
-            "[CELK Helper V32] MODELO SELECIONADO:",
+            "[CELK Helper V34] MODELO SELECIONADO:",
             opcao.textContent
         );
 
@@ -4705,7 +4773,7 @@ async function prepararAtestado(dias, comCid){
             if(confirmar){
 
                 console.log(
-                    "[CELK Helper V32] CONFIRMANDO MODELO."
+                    "[CELK Helper V34] CONFIRMANDO MODELO."
                 );
 
                 confirmar.click();
@@ -4754,7 +4822,7 @@ async function prepararAtestado(dias, comCid){
         aplicarLayoutAssinaturaAtestado(comCid);
 
         console.log(
-            "[CELK Helper V32] ATESTADO ABERTO, DIAS E ASSINATURA AJUSTADOS:",
+            "[CELK Helper V34] ATESTADO ABERTO, DIAS E ASSINATURA AJUSTADOS:",
             dias,
             comCid ? "COM CID" : "SEM CID"
         );
@@ -4782,7 +4850,7 @@ async function prepararAtestado(dias, comCid){
         }catch(_){}
 
         console.error(
-            "[CELK Helper V32] ERRO NO ATESTADO:",
+            "[CELK Helper V34] ERRO NO ATESTADO:",
             e
         );
 
@@ -4847,7 +4915,7 @@ function localizarCampoDiasAtestado(){
 
         if(campo){
             console.log(
-                "[CELK Helper V32] Campo OFICIAL de dias localizado:",
+                "[CELK Helper V34] Campo OFICIAL de dias localizado:",
                 campo.id || campo.name
             );
             return campo;
@@ -5402,7 +5470,7 @@ function atualizarClassificacoesRelatorioVisiveis(){
             alterou = true;
 
             console.log(
-                "[CELK Helper V32] RELATÓRIO ANTIGO CORRIGIDO:",
+                "[CELK Helper V34] RELATÓRIO ANTIGO CORRIGIDO:",
                 paciente.nome,
                 "=>",
                 classificacao
@@ -5426,8 +5494,7 @@ function abrirRelatorio(){
     // Corrige classificações antigas que ainda estejam como NÃO IDENTIFICADA.
     atualizarClassificacoesRelatorioVisiveis();
 
-    const pacientes =
-        JSON.parse(localStorage.getItem("celk_relatorio") || "[]");
+    const pacientes = obterListaRelatorioHoje();
 
     const aba = window.open("", "_blank");
 
