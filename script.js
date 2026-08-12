@@ -2817,10 +2817,10 @@ function registrarFinalizacaoRelatorio(dadosForcado){
 
     const agora = new Date();
 
-    // NOVA REGRA: a SAÍDA/ATENDIDO usa o horário exibido pelo CELK
-    // no elemento "Último acesso" do topo. O objeto Date continua sendo
-    // usado apenas para calcular o intervalo em minutos.
-    const atendido = obterHorarioDoElementoTopoCELK();
+    // CORREÇÃO: a SAÍDA/ATENDIDO deve ser o horário REAL em que
+    // o atendimento foi finalizado, e não o "Último acesso" do topo.
+    // O horário é capturado neste instante, antes da navegação do CELK.
+    const atendido = obterHorarioAtualRelatorio();
 
     let classificacao =
         dados.classificacao || "NÃO IDENTIFICADA";
