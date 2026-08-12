@@ -2127,28 +2127,97 @@ function salvarClassificacaoCache(nome,classificacao){
         }
     }catch(_){}
 
-    console.log("[CELK Helper V39] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // Estrutura observada no CELK: a bolinha fica em cells_4 e o nome
-    // imediatamente na célula cells_5. Usa isso antes dos fallbacks genéricos.
-    const bolaCelula = tr.querySelector('td[wicketpath*="_cells_4_cell"]');
-    const nomeCelula = tr.querySelector('td[wicketpath*="_cells_5_cell"]');
+    // ESTRUTURA CONFIRMADA NOS TESTES DO CELK (12/08/2026):
+    // índice 3 = célula da classificação (icon32 ball-cor)
+    // índice 4 = célula do paciente/nome
+    // Não usar cells_4/cells_5 como regra principal, pois essa numeração
+    // varia conforme a tela/estrutura Wicket.
+    const celulas = Array.from(tr.querySelectorAll("td,th"));
 
-    const bola = bolaCelula && bolaCelula.querySelector(
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-    );
+    const seletoresBola =
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],' +
+        '[class~="ball-green"],[class~="ball-blue"]';
 
-    if(bola && nomeCelula){
-        const nome = String(nomeCelula.innerText || nomeCelula.textContent || "")
-            .replace(/\s+/g," ").trim();
-        const classificacao = classeParaClassificacao(bola);
-        if(nome && pareceNomePaciente(nome) && classificacao !== "NÃO IDENTIFICADA"){
+    // 1) Estrutura exata confirmada pelo teste do usuário.
+    const bolaCelula = celulas[3] || null;
+    const nomeCelula = celulas[4] || null;
+    const bolaExata = bolaCelula && bolaCelula.querySelector(seletoresBola);
+
+    if(bolaExata && nomeCelula){
+        const nome = String(
+            nomeCelula.innerText || nomeCelula.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        const classificacao = classeParaClassificacao(bolaExata);
+
+        if(
+            nome &&
+            pareceNomePaciente(nome) &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
             return {nome, classificacao};
         }
+    }
+
+    // 2) Fallback por wicketpath, caso o CELK mude a estrutura.
+    const bolaCelulaWicket = tr.querySelector(
+        'td[wicketpath*="_cells_3_cell"]'
+    );
+    const nomeCelulaWicket = tr.querySelector(
+        'td[wicketpath*="_cells_4_cell"]'
+    );
+
+    const bolaWicket = bolaCelulaWicket &&
+        bolaCelulaWicket.querySelector(seletoresBola);
+
+    if(bolaWicket && nomeCelulaWicket){
+        const nome = String(
+            nomeCelulaWicket.innerText ||
+            nomeCelulaWicket.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        const classificacao = classeParaClassificacao(bolaWicket);
+
+        if(
+            nome &&
+            pareceNomePaciente(nome) &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
+            return {nome, classificacao};
+        }
+    }
+
+    // 3) Fallback genérico: encontra a bolinha e procura a célula de nome.
+    const bola = tr.querySelector(seletoresBola);
+
+    if(!bola) return null;
+
+    const classificacao = classeParaClassificacao(bola);
+    if(classificacao === "NÃO IDENTIFICADA") return null;
+
+    const indiceBola = celulas.indexOf(bola.closest("td,th"));
+
+    // Normalmente o nome vem imediatamente depois da classificação.
+    for(let i = Math.max(0, indiceBola + 1); i < celulas.length; i++){
+        const nome = String(
+            celulas[i].innerText || celulas[i].textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        if(pareceNomePaciente(nome)){
+            return {nome, classificacao};
+        }
+    }
+
+    // Último fallback: usa o extrator genérico já existente.
+    const nome = nomeDaLinha(tr);
+    if(nome){
+        return {nome, classificacao};
     }
 
     return null;
@@ -2206,19 +2275,6 @@ function extrairMapaClassificacoesDaTabela(){
     const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
 
     for(const tr of linhas){
-        // PRIMEIRO: usa a estrutura Wicket real observada no CELK.
-        // A bolinha fica em cells_4 e o nome em cells_5.
-        // Isso evita que pacientes novos sejam gravados como
-        // "NÃO IDENTIFICADA" quando o restante da linha ainda está sendo reconstruído.
-        const exata = nomeClassificacaoPorEstruturaCELK(tr);
-        if(exata){
-            const chave=normalizarClassificacaoTexto(exata.nome);
-            mapa[chave]=exata.classificacao;
-            salvarClassificacaoCache(exata.nome,exata.classificacao);
-            continue;
-        }
-
-        // SEGUNDO: fallback genérico já utilizado pelo CELK Helper.
         const bola=tr.querySelector(
             '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
         );
@@ -2234,27 +2290,21 @@ function extrairMapaClassificacoesDaTabela(){
     }
 
     // Fallback para estruturas Wicket em que o tr não é encontrado diretamente.
-    const bolas=Array.from(document.querySelectorAll(
-        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-    ));
+    if(!Object.keys(mapa).length){
+        const bolas=Array.from(document.querySelectorAll(
+            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+        ));
 
-    for(const bola of bolas){
-        const tr=encontrarLinhaDaBola(bola);
-        if(!tr) continue;
-
-        const exata = nomeClassificacaoPorEstruturaCELK(tr);
-        if(exata){
-            mapa[normalizarClassificacaoTexto(exata.nome)]=exata.classificacao;
-            salvarClassificacaoCache(exata.nome,exata.classificacao);
-            continue;
-        }
-
-        const nome=nomeDaLinha(tr);
-        const classificacao=classeParaClassificacao(bola);
-        if(nome && classificacao!=="NÃO IDENTIFICADA"){
-            mapa[normalizarClassificacaoTexto(nome)]=classificacao;
-            salvarClassificacaoCache(nome,classificacao);
+        for(const bola of bolas){
+            const tr=encontrarLinhaDaBola(bola);
+            if(!tr) continue;
+            const nome=nomeDaLinha(tr);
+            const classificacao=classeParaClassificacao(bola);
+            if(nome && classificacao!=="NÃO IDENTIFICADA"){
+                mapa[normalizarClassificacaoTexto(nome)]=classificacao;
+                salvarClassificacaoCache(nome,classificacao);
+            }
         }
     }
 
@@ -2370,7 +2420,7 @@ function obterClassificacao(nomePaciente){
 }
 
 // --------------------------------------------------
-// RELATÓRIO DO PLANTÃO — V38
+// RELATÓRIO DO PLANTÃO — V39
 // PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
 // --------------------------------------------------
 // A lógica abaixo mantém o paciente no relatório assim que ele é
@@ -2561,7 +2611,7 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V38] PACIENTE PRÉ-REGISTRADO:",
+        "[CELK RELATÓRIO V39] PACIENTE PRÉ-REGISTRADO:",
         paciente.nome,
         "=>",
         paciente.classificacao
@@ -2610,7 +2660,7 @@ function salvarPacientePendente(
     );
 
     console.log(
-        "[CELK RELATÓRIO V38] PRÉ-REGISTRO:",
+        "[CELK RELATÓRIO V39] PRÉ-REGISTRO:",
         dados.nome,
         "=>",
         dados.classificacao
@@ -2706,7 +2756,7 @@ function registrarFinalizacaoRelatorio(){
 
     if(!dados || !dados.nome){
         console.warn(
-            "[CELK RELATÓRIO V38] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
+            "[CELK RELATÓRIO V39] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
         return false;
     }
@@ -2785,7 +2835,7 @@ function registrarFinalizacaoRelatorio(){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V38] FINALIZAÇÃO REGISTRADA:",
+        "[CELK RELATÓRIO V39] FINALIZAÇÃO REGISTRADA:",
         paciente.nome,
         "=>",
         paciente.classificacao,
@@ -2876,7 +2926,7 @@ function instalarCapturaFinalizacaoRelatorio(){
         }catch(err){
 
             console.error(
-                "[CELK RELATÓRIO V38] ERRO NA CAPTURA DA FINALIZAÇÃO:",
+                "[CELK RELATÓRIO V39] ERRO NA CAPTURA DA FINALIZAÇÃO:",
                 err
             );
 
@@ -2897,7 +2947,7 @@ function instalarCapturaFinalizacaoRelatorio(){
     );
 
     console.log(
-        "[CELK RELATÓRIO V38] CAPTURA DE FINALIZAÇÃO INSTALADA."
+        "[CELK RELATÓRIO V39] CAPTURA DE FINALIZAÇÃO INSTALADA."
     );
 }
 
@@ -6109,7 +6159,7 @@ document
     aba.document.close();
 
     console.log(
-        "[CELK RELATÓRIO V38] RELATÓRIO ABERTO:",
+        "[CELK RELATÓRIO V39] RELATÓRIO ABERTO:",
         pacientes.length,
         "pacientes"
     );
