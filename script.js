@@ -7821,4 +7821,3 @@ function inserirNoEditor(texto){
 }, 2000);
 
 })();
-        
