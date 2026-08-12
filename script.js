@@ -57,8 +57,17 @@ window.celk.init = function(){
     // Alimenta o cache quando estivermos na Consulta de Atendimentos.
     try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
 
+    // Captura a entrada do paciente assim que o nome é clicado.
+    // IMPORTANTE: este hook precisa ser instalado aqui; sem ele o
+    // paciente não é criado no relatório antes da navegação do CELK.
+    instalarCapturaCliquePaciente();
+
     // Captura o clique de finalização ANTES do CELK navegar/remover a tela.
     instalarCapturaFinalizacaoRelatorio();
+
+    // Fallback: caso o CELK finalize por AJAX e o clique não seja
+    // identificado diretamente, observa a mensagem de sucesso.
+    instalarMonitorSucessoFinalizacao();
 
     if(window.celk.intervalo) return;
 
