@@ -2127,7 +2127,7 @@ function salvarClassificacaoCache(nome,classificacao){
         }
     }catch(_){}
 
-    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    console.log("[CELK Helper V39] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
@@ -2206,6 +2206,19 @@ function extrairMapaClassificacoesDaTabela(){
     const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
 
     for(const tr of linhas){
+        // PRIMEIRO: usa a estrutura Wicket real observada no CELK.
+        // A bolinha fica em cells_4 e o nome em cells_5.
+        // Isso evita que pacientes novos sejam gravados como
+        // "NÃO IDENTIFICADA" quando o restante da linha ainda está sendo reconstruído.
+        const exata = nomeClassificacaoPorEstruturaCELK(tr);
+        if(exata){
+            const chave=normalizarClassificacaoTexto(exata.nome);
+            mapa[chave]=exata.classificacao;
+            salvarClassificacaoCache(exata.nome,exata.classificacao);
+            continue;
+        }
+
+        // SEGUNDO: fallback genérico já utilizado pelo CELK Helper.
         const bola=tr.querySelector(
             '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
         );
@@ -2221,21 +2234,27 @@ function extrairMapaClassificacoesDaTabela(){
     }
 
     // Fallback para estruturas Wicket em que o tr não é encontrado diretamente.
-    if(!Object.keys(mapa).length){
-        const bolas=Array.from(document.querySelectorAll(
-            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        ));
+    const bolas=Array.from(document.querySelectorAll(
+        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+    ));
 
-        for(const bola of bolas){
-            const tr=encontrarLinhaDaBola(bola);
-            if(!tr) continue;
-            const nome=nomeDaLinha(tr);
-            const classificacao=classeParaClassificacao(bola);
-            if(nome && classificacao!=="NÃO IDENTIFICADA"){
-                mapa[normalizarClassificacaoTexto(nome)]=classificacao;
-                salvarClassificacaoCache(nome,classificacao);
-            }
+    for(const bola of bolas){
+        const tr=encontrarLinhaDaBola(bola);
+        if(!tr) continue;
+
+        const exata = nomeClassificacaoPorEstruturaCELK(tr);
+        if(exata){
+            mapa[normalizarClassificacaoTexto(exata.nome)]=exata.classificacao;
+            salvarClassificacaoCache(exata.nome,exata.classificacao);
+            continue;
+        }
+
+        const nome=nomeDaLinha(tr);
+        const classificacao=classeParaClassificacao(bola);
+        if(nome && classificacao!=="NÃO IDENTIFICADA"){
+            mapa[normalizarClassificacaoTexto(nome)]=classificacao;
+            salvarClassificacaoCache(nome,classificacao);
         }
     }
 
