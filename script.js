@@ -1,42 +1,3 @@
-CELK — MODULO DE RELATORIO ROBUSTO
-====================================
-
-ESTE ARQUIVO FOI FEITO PARA CORRIGIR O RELATORIO.
-
-O modulo:
-- pre-registra o paciente enquanto ele aparece na CONSULTA DE ATENDIMENTOS;
-- captura a cor da pulseira diretamente das classes BALL-RED / BALL-ORANGE / BALL-YELLOW / BALL-GREEN / BALL-BLUE;
-- grava nome, idade, classificacao e chegada;
-- ao clicar em SALVAR/FINALIZAR ATENDIMENTO, grava o horario de atendimento;
-- calcula o tempo;
-- abre o RELATORIO em uma janela propria;
-- o relatorio atualiza automaticamente;
-- mostra a classificacao com a cor correspondente;
-- funciona tambem para pacientes ja pre-registrados.
-
-COMO USAR
-==========
-
-1. Salve este conteudo como parte do seu script CELK Helper.
-2. Se estiver testando pelo Console, cole o bloco JavaScript inteiro.
-3. Para o script definitivo, coloque este modulo no final do seu script V34.
-4. Recarregue a pagina do CELK.
-5. Entre em CONSULTA DE ATENDIMENTOS.
-6. O paciente deve aparecer no console como:
-   [CELK Helper] PACIENTE PRE-REGISTRADO: NOME => VERDE | CHEGADA: 09:15
-7. Ao finalizar o atendimento, deve aparecer:
-   [CELK Helper] PACIENTE FINALIZADO: NOME | ATENDIDO: 09:XX | TEMPO: X min
-8. Clique em RELATORIO.
-
-IMPORTANTE
-==========
-Nao apague as outras partes do seu V34. Este arquivo e o MODULO ROBUSTO
-DO RELATORIO para ser incorporado ao script atual.
-
-CODIGO
-======
-
-
 // ============================================================
 // CELK HELPER — MÓDULO RELATÓRIO ROBUSTO
 // PRÉ-REGISTRO + FINALIZAÇÃO + RELATÓRIO EM TEMPO REAL
@@ -315,23 +276,60 @@ function atualizarFinalizacao(nome) {
 }
 
 function capturarListaCELK() {
-    const linhas = [...document.querySelectorAll("tr")];
+    // O CELK possui as colunas nesta ordem:
+    // [CR, Paciente, Idade, Tempo, Chegada, Tipo de atendimento, ...]
+    // Portanto NAO usamos simplesmente o 4o valor como chegada.
+    // A chegada verdadeira fica na coluna cujo cabecalho e "Chegada".
 
+    const linhas = [...document.querySelectorAll("tr")];
     let encontrados = 0;
 
-    for (const row of linhas) {
+    // Localiza a tabela de Consulta de Atendimentos pelo cabecalho.
+    let tabelaAlvo = null;
+    let mapa = null;
+
+    for (const tr of linhas) {
+        const ths = [...tr.querySelectorAll("th")].map(x => texto(x));
+        const idxPaciente = ths.findIndex(x => norm(x) === "paciente");
+        const idxTempo = ths.findIndex(x => norm(x) === "tempo");
+        const idxChegada = ths.findIndex(x => norm(x) === "chegada");
+
+        if (idxPaciente >= 0 && idxTempo >= 0 && idxChegada >= 0) {
+            tabelaAlvo = tr.closest("table");
+            mapa = { idxPaciente, idxTempo, idxChegada };
+            break;
+        }
+    }
+
+    if (!tabelaAlvo || !mapa) {
+        console.warn("[CELK Helper] TABELA DE ATENDIMENTOS NAO ENCONTRADA.");
+        return 0;
+    }
+
+    const linhasDados = [...tabelaAlvo.querySelectorAll("tr")];
+
+    for (const row of linhasDados) {
+        const celulas = [...row.querySelectorAll("td")];
+        if (!celulas.length) continue;
+
+        const nome = texto(celulas[mapa.idxPaciente]);
+        if (!nome || nome.length < 2 || norm(nome) === "paciente") continue;
+
         const classe = capturarClassificacaoDoRow(row);
         if (!classe) continue;
 
-        const nome = encontrarNomeNaLinha(row);
-        if (!nome) continue;
+        const idade = celulas[mapa.idxPaciente + 1]
+            ? texto(celulas[mapa.idxPaciente + 1])
+            : "";
 
-        const t = texto(row);
-        const chegada = extrairHorario(t);
+        // IMPORTANTE: pega EXATAMENTE a coluna Chegada.
+        const chegadaTexto = celulas[mapa.idxChegada]
+            ? texto(celulas[mapa.idxChegada])
+            : "";
 
-        let idade = "";
-        const idadeM = t.match(/\b(\d+\s*(?:ano|anos|mes|meses|dia|dias)(?:\s*e\s*\d+\s*(?:mes|meses|dia|dias))?)/i);
-        if (idadeM) idade = idadeM[1];
+        // Ex.: "12/08/2026 - 09:15 BRT" -> "09:15"
+        const hm = chegadaTexto.match(/\b(\d{1,2}:\d{2})\b/);
+        const chegada = hm ? hm[1] : "";
 
         preRegistrar({
             nome,
@@ -343,10 +341,12 @@ function capturarListaCELK() {
         encontrados++;
 
         console.log(
-            "[CELK Helper] CLASSIFICAÇÃO CAPTURADA:",
+            "[CELK Helper] PACIENTE PRE-REGISTRADO:",
             nome,
             "=>",
-            classe
+            classe,
+            "| CHEGADA:",
+            chegada || "NAO ENCONTRADA"
         );
     }
 
