@@ -2544,6 +2544,63 @@ function salvarPacientePendente(nome,idade,chegada,classificacao){
     );
 }
 
+function registrarEntradaAoClicarPacienteCELK(tr,evento){
+
+    if(!tr) return false;
+
+    window.celk.ultimaEntradaRelatorio = Date.now();
+
+    const dados = extrairDadosDaLinhaPaciente(tr);
+
+    if(!dados.nome || !pareceNomePaciente(dados.nome)){
+        console.warn(
+            "[CELK RELATÓRIO] CLIQUE SEM NOME DE PACIENTE:",
+            dados
+        );
+        return false;
+    }
+
+    // A CHEGADA é o instante em que você clicou para abrir/atender
+    // o paciente. NÃO usamos "Último acesso" nem a hora exibida
+    // posteriormente no cabeçalho.
+    const chegada = obterHorarioAtualRelatorio();
+
+    let classificacao = dados.classificacao;
+
+    if(
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ){
+        classificacao = obterClassificacaoDoCache(dados.nome);
+    }
+
+    if(
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ){
+        classificacao = obterClassificacao(dados.nome);
+    }
+
+    // Salva o paciente atual antes do CELK navegar para a tela
+    // do atendimento.
+    salvarPacientePendente(
+        dados.nome,
+        dados.idade,
+        chegada,
+        classificacao
+    );
+
+    console.log(
+        "[CELK RELATÓRIO] ENTRADA REGISTRADA:",
+        dados.nome,
+        "| IDADE:", dados.idade,
+        "| CLASSIFICAÇÃO:", classificacao,
+        "| CHEGADA:", chegada
+    );
+
+    return true;
+}
+
 function instalarCapturaCliquePaciente(){
 
     if(window.celk.relatorioCliquePacienteInstalado) return;
@@ -2553,51 +2610,54 @@ function instalarCapturaCliquePaciente(){
 
         try{
 
-            const alvo = obterLinhaDoEventoCELK(evento);
+            const tr = obterLinhaDoEventoCELK(evento);
+            if(!tr) return;
 
-            if(!alvo) return;
+            // SOMENTE o clique no campo NOME abre/começa o atendimento.
+            // Isso evita registrar chegada ao clicar em ícones/ações da linha.
+            let alvoNome = null;
 
-            // Não registra clique em botões/ícones da linha.
-            const elemento = evento.target && evento.target.closest
-                ? evento.target.closest("a,button,input,select,textarea")
-                : null;
-
-            if(elemento){
-
-                const textoElemento = (
-                    elemento.innerText ||
-                    elemento.textContent ||
-                    elemento.value ||
-                    ""
-                ).trim().toLowerCase();
-
-                // Ícones/ações da linha não representam a entrada do paciente.
-                if(
-                    elemento.tagName === "BUTTON" ||
-                    elemento.tagName === "INPUT" ||
-                    elemento.tagName === "SELECT" ||
-                    elemento.tagName === "TEXTAREA"
-                ){
-                    return;
-                }
-
-                // Se for link, só aceita quando houver texto compatível
-                // com o nome do paciente.
-                if(
-                    elemento.tagName === "A" &&
-                    !textoElemento
-                ){
-                    return;
-                }
-            }
-
-            // Captura a classificação ANTES da navegação do Wicket.
             try{
-                capturarClassificacaoDaLinha(alvo);
+                if(
+                    evento.target &&
+                    evento.target.closest
+                ){
+                    alvoNome = evento.target.closest(
+                        'td[wicketpath*="_cells_5_cell"]'
+                    );
+                }
             }catch(_){}
 
-            // Registra a chegada somente se for realmente o paciente.
-            registrarEntradaAoClicarPacienteCELK(alvo,evento);
+            if(!alvoNome) return;
+
+            const dados = extrairDadosDaLinhaPaciente(tr);
+
+            if(
+                !dados.nome ||
+                !pareceNomePaciente(dados.nome)
+            ){
+                return;
+            }
+
+            // Classificação precisa ser capturada antes da navegação.
+            try{
+                capturarClassificacaoDaLinha(tr);
+            }catch(_){}
+
+            // No mousedown registramos uma única vez.
+            if(evento.type === "mousedown"){
+                registrarEntradaAoClicarPacienteCELK(tr,evento);
+                return;
+            }
+
+            // O click é apenas fallback se o mousedown não tiver
+            // conseguido registrar.
+            if(
+                !window.celk.ultimaEntradaRelatorio ||
+                Date.now() - window.celk.ultimaEntradaRelatorio > 1200
+            ){
+                registrarEntradaAoClicarPacienteCELK(tr,evento);
+            }
 
         }catch(err){
 
@@ -2610,14 +2670,12 @@ function instalarCapturaCliquePaciente(){
 
     }
 
-    // mousedown vem antes da navegação do CELK.
     document.addEventListener(
         "mousedown",
         processarEvento,
         true
     );
 
-    // click funciona como segunda camada.
     document.addEventListener(
         "click",
         processarEvento,
@@ -2632,6 +2690,30 @@ function instalarCapturaCliquePaciente(){
 // =========================================================
 // SAÍDA — FINALIZAÇÃO DO ATENDIMENTO
 // =========================================================
+
+function calcularTempoEntreHorarios(chegada,atendido){
+
+    if(
+        !/^\d{1,2}:\d{2}$/.test(String(chegada || "").trim()) ||
+        !/^\d{1,2}:\d{2}$/.test(String(atendido || "").trim())
+    ){
+        return "";
+    }
+
+    const p1 = String(chegada).trim().split(":");
+    const p2 = String(atendido).trim().split(":");
+
+    const inicio = Number(p1[0]) * 60 + Number(p1[1]);
+    const fim = Number(p2[0]) * 60 + Number(p2[1]);
+
+    let minutos = fim - inicio;
+
+    if(minutos < 0){
+        minutos += 24 * 60;
+    }
+
+    return minutos + " min";
+}
 
 function calcularTempoRelatorio(chegada,agora){
     if(
@@ -2806,27 +2888,74 @@ function dadosPacienteAtual(){
 }
 
 function registrarFinalizacaoRelatorio(dadosForcado){
-    const dados = dadosForcado || dadosPacienteAtual();
+
+    // O paciente pendente salvo no clique é a fonte oficial da
+    // CHEGADA. Isso impede que o horário de entrada vá para ATENDIDO
+    // e impede que CHEGADA fique vazia.
+    let dados = dadosForcado || null;
+
+    if(!dados){
+        try{
+            dados = JSON.parse(
+                localStorage.getItem("celk_paciente_pendente") || "null"
+            );
+        }catch(_){
+            dados = null;
+        }
+    }
 
     if(!dados || !dados.nome){
+
+        dados = dadosPacienteAtual();
+
+    }
+
+    if(!dados || !dados.nome){
+
         console.warn(
             "[CELK RELATÓRIO] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
+
         return false;
     }
 
     const agora = new Date();
 
-    // CORREÇÃO: a SAÍDA/ATENDIDO deve ser o horário REAL em que
-    // o atendimento foi finalizado, e não o "Último acesso" do topo.
-    // O horário é capturado neste instante, antes da navegação do CELK.
+    // ATENDIDO = instante REAL em que SALVAR ATENDIMENTO /
+    // FINALIZAR foi acionado.
     const atendido = obterHorarioAtualRelatorio();
+
+    let chegada = String(
+        dados.chegada || ""
+    ).trim();
+
+    // Se por algum motivo o pendente antigo estiver sem chegada,
+    // não substituímos por "Último acesso". Recuperamos somente
+    // se houver um registro aberto do mesmo paciente com chegada.
+    if(!chegada){
+
+        const listaAtual = obterListaRelatorio();
+
+        const aberto = listaAtual.find(function(item){
+            return (
+                normalizarClassificacaoTexto(item.nome) ===
+                normalizarClassificacaoTexto(dados.nome) &&
+                !item.atendido &&
+                String(item.chegada || "").trim()
+            );
+        });
+
+        if(aberto){
+            chegada = String(aberto.chegada).trim();
+        }
+    }
 
     let classificacao =
         dados.classificacao || "NÃO IDENTIFICADA";
 
     if(classificacao === "NÃO IDENTIFICADA"){
         const cache = obterClassificacaoDoCache(dados.nome);
+
         if(cache !== "NÃO IDENTIFICADA"){
             classificacao = cache;
         }
@@ -2834,36 +2963,54 @@ function registrarFinalizacaoRelatorio(dadosForcado){
 
     const lista = obterListaRelatorio();
 
-    let paciente = localizarPacienteNoRelatorio(
-        lista,
-        dados.nome,
-        dados.chegada
-    );
+    // Primeiro procura o registro ABERTO do paciente.
+    let paciente = lista.find(function(item){
+        return (
+            normalizarClassificacaoTexto(item.nome) ===
+            normalizarClassificacaoTexto(dados.nome) &&
+            !item.atendido
+        );
+    });
+
+    // Fallback: localização tradicional.
+    if(!paciente){
+        paciente = localizarPacienteNoRelatorio(
+            lista,
+            dados.nome,
+            chegada
+        );
+    }
 
     if(!paciente){
+
+        // Não deveria acontecer se a entrada foi registrada.
+        // Ainda assim criamos o registro sem inventar a chegada.
         paciente = {
             numero:lista.length + 1,
             nome:dados.nome,
             idade:dados.idade || "",
             classificacao:classificacao,
-            chegada:dados.chegada || "",
+            chegada:chegada,
             atendido:atendido,
-            tempo:calcularTempoRelatorio(
-                dados.chegada,
-                agora
+            tempo:calcularTempoEntreHorarios(
+                chegada,
+                atendido
             )
         };
 
         lista.push(paciente);
+
     }else{
+
         paciente.nome = dados.nome;
 
         if(dados.idade){
             paciente.idade = dados.idade;
         }
 
-        if(dados.chegada){
-            paciente.chegada = dados.chegada;
+        // CHEGADA vem exclusivamente do registro de entrada.
+        if(chegada){
+            paciente.chegada = chegada;
         }
 
         if(
@@ -2873,26 +3020,31 @@ function registrarFinalizacaoRelatorio(dadosForcado){
             paciente.classificacao = classificacao;
         }
 
+        // ATENDIDO é exclusivamente o horário de finalização.
         paciente.atendido = atendido;
-        paciente.tempo = calcularTempoRelatorio(
+
+        // TEMPO = ATENDIDO - CHEGADA.
+        paciente.tempo = calcularTempoEntreHorarios(
             paciente.chegada,
-            agora
+            paciente.atendido
         );
     }
 
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO] SAÍDA REGISTRADA:",
+        "[CELK RELATÓRIO] FINALIZAÇÃO REGISTRADA:",
         paciente.nome,
-        "| CHEGADA:",paciente.chegada,
-        "| ATENDIDO:",paciente.atendido,
-        "| TEMPO:",paciente.tempo
+        "| CHEGADA:", paciente.chegada,
+        "| ATENDIDO:", paciente.atendido,
+        "| TEMPO:", paciente.tempo
     );
 
     try{
-        localStorage.removeItem("celk_paciente_pendente");
-    }catch(_){ }
+        localStorage.removeItem(
+            "celk_paciente_pendente"
+        );
+    }catch(_){}
 
     return true;
 }
