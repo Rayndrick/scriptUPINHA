@@ -3419,7 +3419,10 @@ function obterDadosPacienteDeclaracao(){
 
     const tela = document.body.innerText || "";
 
-    // Mesmo padrão já usado no Helper para o cabeçalho do paciente.
+    // =========================================================
+    // PACIENTE
+    // =========================================================
+
     const cabecalho = tela.match(
         /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
     );
@@ -3432,11 +3435,220 @@ function obterDadosPacienteDeclaracao(){
         ? cabecalho[2].trim()
         : "";
 
-    // Para a declaração, usar somente a idade em anos.
     const idadeMatch = idadeTexto.match(/(\d+)\s*anos?/i);
     const idade = idadeMatch ? idadeMatch[1] : idadeTexto;
 
-    // Horário de chegada: prioriza a triagem.
+
+    // =========================================================
+    // NOME DA MÃE / RESPONSÁVEL
+    // =========================================================
+    // O CELK pode apresentar a filiação em formatos diferentes.
+    // Tentamos primeiro campos reais da tela e depois o texto visível.
+    // =========================================================
+
+    function normalizarNomeDeclaracao(valor){
+        return String(valor || "")
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function nomeMaeValido(valor){
+        const nomeTestado = normalizarNomeDeclaracao(valor);
+
+        if(!nomeTestado) return false;
+        if(nomeTestado.length < 5) return false;
+
+        if(/^(MÃ?E|MAE|PAI|NOME|FILIAÇÃO|FILIACAO|RESPONSÁVEL|RESPONSAVEL)$/i.test(nomeTestado)){
+            return false;
+        }
+
+        if(/^(NÃO INFORMADO|NAO INFORMADO|NÃO CADASTRADO|NAO CADASTRADO|NÃO POSSUI|NAO POSSUI|IGNORADO|DESCONHECIDO)$/i.test(nomeTestado)){
+            return false;
+        }
+
+        // Nome não deve conter números.
+        if(/\d/.test(nomeTestado)) return false;
+
+        // Evita capturar textos muito grandes da página.
+        if(nomeTestado.length > 120) return false;
+
+        return true;
+    }
+
+    function obterNomeMae(){
+
+        // ---------------------------------------------------------
+        // 1) Campos com identificadores relacionados a mãe/filiação
+        // ---------------------------------------------------------
+
+        const campos = [
+            ...document.querySelectorAll("input, textarea, select")
+        ];
+
+        for(const campo of campos){
+
+            const identificadores = [
+                campo.id || "",
+                campo.name || "",
+                campo.getAttribute("wicketpath") || "",
+                campo.getAttribute("aria-label") || "",
+                campo.getAttribute("title") || "",
+                campo.getAttribute("placeholder") || ""
+            ].join(" ").toUpperCase();
+
+            const ehMae =
+                identificadores.includes("NOMEMAE") ||
+                identificadores.includes("NOME_MAE") ||
+                identificadores.includes("NOME-MAE") ||
+                identificadores.includes("NOME DA MAE") ||
+                identificadores.includes("NOME DA MÃE") ||
+                /\bMAE\b/.test(identificadores) ||
+                /\bMÃE\b/.test(identificadores) ||
+                identificadores.includes("FILIAÇÃO") ||
+                identificadores.includes("FILIACAO");
+
+            if(!ehMae) continue;
+
+            const valor =
+                campo.value ||
+                campo.getAttribute("value") ||
+                campo.textContent ||
+                "";
+
+            if(nomeMaeValido(valor)){
+                return normalizarNomeDeclaracao(valor).toUpperCase();
+            }
+        }
+
+
+        // ---------------------------------------------------------
+        // 2) Procura no texto visível por:
+        //    NOME DA MÃE: XXXXX
+        //    MÃE: XXXXX
+        //    FILIAÇÃO: XXXXX / XXXXX
+        // ---------------------------------------------------------
+
+        const linhas = tela
+            .split(/\n+/)
+            .map(linha => normalizarNomeDeclaracao(linha))
+            .filter(Boolean);
+
+        for(let i = 0; i < linhas.length; i++){
+
+            const linha = linhas[i];
+
+            const mMae = linha.match(
+                /(?:NOME\s+DA\s+M[ÃA]E|M[ÃA]E)\s*[:\-]\s*(.+)$/i
+            );
+
+            if(mMae && nomeMaeValido(mMae[1])){
+                return normalizarNomeDeclaracao(mMae[1]).toUpperCase();
+            }
+
+            const mFiliacao = linha.match(
+                /FILIA(?:Ç|C)[AÃ]O\s*[:\-]\s*(.+)$/i
+            );
+
+            if(mFiliacao){
+
+                const partes = mFiliacao[1]
+                    .split(/\s*(?:\/|;|\|| e )\s*/i)
+                    .map(x => normalizarNomeDeclaracao(x))
+                    .filter(nomeMaeValido);
+
+                if(partes.length){
+                    // Quando houver dois nomes, o primeiro é usado como mãe.
+                    return partes[0].toUpperCase();
+                }
+            }
+
+            // -----------------------------------------------------
+            // 3) Quando o CELK coloca "Mãe" em uma linha e o nome
+            //    na linha seguinte.
+            // -----------------------------------------------------
+
+            if(/^(NOME\s+DA\s+M[ÃA]E|M[ÃA]E)$/i.test(linha)){
+
+                const proxima = linhas[i + 1] || "";
+
+                if(nomeMaeValido(proxima)){
+                    return proxima.toUpperCase();
+                }
+            }
+        }
+
+
+        // ---------------------------------------------------------
+        // 4) Procura elementos que contenham "Nome da Mãe" e pega
+        //    o valor do campo ou o texto imediatamente próximo.
+        // ---------------------------------------------------------
+
+        const elementos = [
+            ...document.querySelectorAll(
+                "label, td, th, div, span, p, strong"
+            )
+        ];
+
+        for(const el of elementos){
+
+            const texto = normalizarNomeDeclaracao(
+                el.innerText || el.textContent || ""
+            );
+
+            if(!/^(NOME\s+DA\s+M[ÃA]E|M[ÃA]E|FILIA(?:Ç|C)[AÃ]O)$/i.test(texto)){
+                continue;
+            }
+
+            // Campo dentro do próprio elemento/pai.
+            const raiz = el.parentElement || el;
+            const campo = raiz.querySelector(
+                "input, textarea, select"
+            );
+
+            if(campo){
+
+                const valor =
+                    campo.value ||
+                    campo.getAttribute("value") ||
+                    campo.textContent ||
+                    "";
+
+                if(nomeMaeValido(valor)){
+                    return normalizarNomeDeclaracao(valor).toUpperCase();
+                }
+            }
+
+            // Texto do próximo irmão.
+            let proximo = el.nextElementSibling;
+
+            if(proximo){
+
+                const valor = normalizarNomeDeclaracao(
+                    proximo.innerText || proximo.textContent || ""
+                );
+
+                if(nomeMaeValido(valor)){
+                    return valor.toUpperCase();
+                }
+            }
+        }
+
+
+        console.warn(
+            "[CELK Helper V32] Nome da mãe não encontrado na tela."
+        );
+
+        return "NÃO IDENTIFICADO";
+    }
+
+    const nomeMae = obterNomeMae();
+
+
+    // =========================================================
+    // HORÁRIO DE CHEGADA
+    // =========================================================
+
     let chegada = "";
 
     const mTriagem = tela.match(
@@ -3447,7 +3659,6 @@ function obterDadosPacienteDeclaracao(){
         chegada = mTriagem[1];
     }
 
-    // Fallbacks caso o texto da triagem esteja em outro formato.
     if(!chegada){
         const mChegada = tela.match(
             /(?:CHEGADA|ENTRADA)[^\d]{0,40}(\d{2}:\d{2})/i
@@ -3462,6 +3673,11 @@ function obterDadosPacienteDeclaracao(){
         chegada = "NÃO IDENTIFICADO";
     }
 
+
+    // =========================================================
+    // DATA / SAÍDA
+    // =========================================================
+
     const agora = new Date();
 
     const data = agora.toLocaleDateString("pt-BR",{
@@ -3470,14 +3686,19 @@ function obterDadosPacienteDeclaracao(){
         year:"numeric"
     });
 
-    const saida = agora.toLocaleTimeString("pt-BR",{
+    // Horário de saída = horário atual + 10 minutos
+    const saidaData = new Date(agora.getTime() + 10 * 60 * 1000);
+
+    const saida = saidaData.toLocaleTimeString("pt-BR",{
         hour:"2-digit",
         minute:"2-digit",
         hourCycle:"h23"
     });
 
+
     return {
         nome,
+        nomeMae,
         idade,
         chegada,
         saida,
@@ -3773,10 +3994,166 @@ function montarDeclaracaoPaciente(dados){
     `;
 }
 
+
+function extrairNomeAcompanhanteDoEditor(alvos){
+    /*
+     * IMPORTANTE:
+     * O CELK preenche o nome da acompanhante/mãe na declaração
+     * nativa. Esse nome NÃO fica no body principal antes da criação
+     * do documento.
+     *
+     * Portanto, depois que o modelo "DECLARAÇÃO DE COMPARECIMENTO
+     * (ACOMPANHANTE)" é aberto, lemos o conteúdo que o próprio CELK
+     * acabou de inserir no TinyMCE e extraímos o nome dali.
+     */
+
+    const normalizar = valor => String(valor || "")
+        .replace(/[\u200B-\u200D\uFEFF]/g,"")
+        .replace(/\u00A0/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+
+    const valido = valor => {
+        const n = normalizar(valor);
+
+        if(!n || n.length < 5 || n.length > 120) return false;
+        if(/\d/.test(n)) return false;
+
+        if(
+            /^(NÃO IDENTIFICADO|NAO IDENTIFICADO|NÃO INFORMADO|NAO INFORMADO)$/i
+                .test(n)
+        ){
+            return false;
+        }
+
+        return true;
+    };
+
+    for(const alvo of (alvos || [])){
+
+        let texto = "";
+        let html = "";
+
+        try{
+            const elemento = alvo?.elemento;
+
+            if(elemento){
+                texto =
+                    elemento.innerText ||
+                    elemento.textContent ||
+                    "";
+
+                html = elemento.innerHTML || "";
+            }
+        }catch(_){}
+
+        // Tenta também pelo editor TinyMCE associado ao elemento.
+        try{
+            if(window.tinymce?.editors?.length){
+                const editor = window.tinymce.editors.find(ed => {
+                    try{
+                        const body = ed.getBody?.();
+                        return body === alvo?.elemento ||
+                               body?.contains?.(alvo?.elemento) ||
+                               alvo?.elemento?.contains?.(body);
+                    }catch(_){
+                        return false;
+                    }
+                });
+
+                if(editor){
+                    texto = editor.getContent({format:"text"}) || texto;
+                    html = editor.getContent() || html;
+                }
+            }
+        }catch(_){}
+
+        texto = normalizar(texto);
+
+        // Caso mais direto: o CELK coloca o nome dentro de <span>.
+        const spans = [];
+        try{
+            const doc =
+                alvo?.elemento?.ownerDocument ||
+                document;
+
+            spans.push(
+                ...doc.querySelectorAll(
+                    "span"
+                )
+            );
+        }catch(_){}
+
+        for(const span of spans){
+
+            const nome = normalizar(
+                span.innerText ||
+                span.textContent ||
+                ""
+            );
+
+            if(!valido(nome)) continue;
+
+            /*
+             * Evita pegar spans de assinatura, data, estilos etc.
+             * O nome da acompanhante aparece imediatamente na frase
+             * "Sr. (a)".
+             */
+            const paiTexto = normalizar(
+                span.parentElement?.innerText ||
+                span.parentElement?.textContent ||
+                ""
+            );
+
+            if(
+                /Sr\.\s*\(?a\)?/i.test(paiTexto) ||
+                /Sr\.?\s*\(?a\)?/i.test(paiTexto)
+            ){
+                return nome.toUpperCase();
+            }
+        }
+
+        // Fallback pelo texto da declaração nativa.
+        const m = texto.match(
+            /Sr\.?\s*\(?a\)?\s*[:\-]?\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ' .-]{4,119}?)(?=\s+esteve\s+na\s+Unidade)/i
+        );
+
+        if(m && valido(m[1])){
+            return normalizar(m[1]).toUpperCase();
+        }
+
+        // Fallback pelo HTML: captura exatamente o conteúdo do span
+        // que vem depois de "Sr. (a)".
+        const mh = html.match(
+            /Sr\.?\s*\(?a\)?[^<]{0,80}<span[^>]*>\s*([^<]+?)\s*<\/span>/i
+        );
+
+        if(mh && valido(mh[1])){
+            return normalizar(mh[1]).toUpperCase();
+        }
+    }
+
+    console.warn(
+        "[CELK Helper V32] Não consegui extrair do editor o nome da acompanhante."
+    );
+
+    return "";
+}
+
 function montarDeclaracaoAcompanhante(dados){
 
+    const nomeMae = dados.nomeMae || "NÃO IDENTIFICADO";
+
     return `
-        <p style="margin:0 0 18px 0;"><strong>DECLARAÇÃO DE COMPARECIMENTO</strong></p>
+        <p style="margin:0 0 18px 0;">
+            <strong>DECLARAÇÃO DE COMPARECIMENTO (ACOMPANHANTE)</strong>
+        </p>
+
+        <p style="margin:0 0 12px 0;">
+            Declaro para os devidos fins, que o(a) Sr.(a)
+            <strong>${nomeMae}</strong>
+            esteve na Unidade Pronto Atendimento, para acompanhar o seguinte paciente:
+        </p>
 
         <p style="margin:0 0 12px 0;">
             Nome do Paciente: <strong>${dados.nome}</strong>,
@@ -4005,6 +4382,47 @@ async function prepararDeclaracao(acompanhante){
                 "O editor da Declaração não foi encontrado."
             );
         }
+
+        // --------------------------------------------------
+        // O CELK já preenche automaticamente o nome da mãe/
+        // acompanhante no documento nativo.
+        //
+        // Pegamos esse nome AGORA, antes de substituir o conteúdo
+        // do editor pelo nosso modelo personalizado.
+        // --------------------------------------------------
+        if(acompanhante){
+
+            const nomeNativo =
+                extrairNomeAcompanhanteDoEditor(alvos);
+
+            if(nomeNativo){
+                dados.nomeMae = nomeNativo;
+
+                console.log(
+                    "[CELK Helper V32] NOME DA ACOMPANHANTE CAPTURADO DO CELK:",
+                    dados.nomeMae
+                );
+            }else{
+                console.warn(
+                    "[CELK Helper V32] CELK abriu a declaração, mas não foi possível capturar o nome da acompanhante."
+                );
+            }
+        }
+
+        // Recalcula a saída NO MOMENTO EXATO em que a declaração
+        // será preenchida: horário atual + 10 minutos.
+        // Isso evita usar um horário calculado antes da abertura
+        // do modelo nativo do CELK.
+        const agoraSaida = new Date();
+        const saidaMais10 = new Date(
+            agoraSaida.getTime() + 10 * 60 * 1000
+        );
+
+        dados.saida = saidaMais10.toLocaleTimeString("pt-BR",{
+            hour:"2-digit",
+            minute:"2-digit",
+            hourCycle:"h23"
+        });
 
         const html = acompanhante
             ? montarDeclaracaoAcompanhante(dados)
