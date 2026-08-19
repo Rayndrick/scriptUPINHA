@@ -2031,9 +2031,10 @@ function iniciarAtualizacao(){
 // MANTÉM A ESTRUTURA ORIGINAL DO RELATÓRIO E ACRESCENTA:
 //   CHEGADA        = horário da chegada na fila do CELK
 //   ATENDIDO       = momento em que o Helper inicia o atendimento
+//   TEMPO          = ATENDIDO - CHEGADA
 //   SAÍDA          = momento em que o atendimento é finalizado
+//   T. ATENDIMENTO = SAÍDA - ATENDIDO
 //   T. TOTAL       = SAÍDA - CHEGADA
-//   (T. Atendimento continua calculado internamente, mas não é exibido)
 // =========================================================
 
 function normalizarCelk(valor){
@@ -2417,13 +2418,12 @@ function extrairDadosDaLinhaPaciente(tr){
         };
     }
 
-    // Estrutura real observada na fila do CELK:
-    // Estrutura atual da fila do CELK:
-    // cells_5 = classificação (bola)
-    // cells_6 = nome
+    // Estrutura REAL da fila do CELK:
+    // cells_5 = CR / classificação (bola)
+    // cells_6 = paciente / nome
     // cells_7 = idade
-    // cells_8 = tempo de espera
-    // cells_9 = chegada
+    // cells_8 = TEMPO de espera
+    // cells_9 = CHEGADA (data/hora real da fila)
     const nomeCelula = tr.querySelector(
         '[wicketpath*="_cells_6_cell"]'
     );
@@ -3116,11 +3116,13 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.classificacao = classificacao;
     }
 
-    // ATENDIDO NÃO é preenchido na finalização.
-    // Ele deve ter sido registrado quando o Helper iniciou o atendimento.
-    // Se estiver vazio, permanece vazio para não fabricar um horário.
+    // Se o início não foi capturado por algum motivo,
+    // mantemos compatibilidade e registramos ATENDIDO agora.
+    if(!paciente.atendido){
+        paciente.atendido = saida;
+    }
 
-    // SAÍDA é o momento da finalização confirmada pelo CELK.
+    // SAÍDA é o momento da finalização.
     if(!paciente.saida){
         paciente.saida = saida;
     }
@@ -3460,22 +3462,6 @@ function repararRelatorioExistente(){
                 }
             }
 
-            // Recalcula o tempo total quando já existem chegada e saída.
-            if(
-                paciente.chegada &&
-                paciente.saida
-            ){
-                const novoTotal = calcularTempoTotalRelatorio(
-                    paciente.chegada,
-                    paciente.saida
-                );
-
-                if(paciente.tempoTotal !== novoTotal){
-                    paciente.tempoTotal = novoTotal;
-                    alterou = true;
-                }
-            }
-
             // Recupera chegada do histórico do clique na fila.
             if(!paciente.chegada){
                 for(let i=historico.length-1;i>=0;i--){
@@ -3565,6 +3551,7 @@ td.horario,td.tempo{white-space:nowrap}
 <th>Atendido</th>
 
 <th>Saída</th>
+<th>T. Atendimento</th>
 <th>T. Total</th>
 </tr>
 </thead>
@@ -3581,10 +3568,11 @@ ${lista.length ? lista.map(function(paciente){
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
+<td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
 </tr>`;
 }).join("") : `
-<tr><td colspan="8">NENHUM PACIENTE REGISTRADO.</td></tr>
+<tr><td colspan="9">NENHUM PACIENTE REGISTRADO.</td></tr>
 `}
 </tbody>
 </table>
@@ -3625,9 +3613,10 @@ window.addEventListener("message",function(evento){
             "<td>"+esc(paciente.chegada)+"</td>"+
             "<td>"+esc(paciente.atendido)+"</td>"+
             "<td>"+esc(paciente.saida)+"</td>"+
+            "<td>"+esc(paciente.tempoAtendimento)+"</td>"+
             "<td>"+esc(paciente.tempoTotal)+"</td>"+
             "</tr>";
-    }).join("") : "<tr><td colspan=\"8\">NENHUM PACIENTE REGISTRADO.</td></tr>";
+    }).join("") : "<tr><td colspan=\"9\">NENHUM PACIENTE REGISTRADO.</td></tr>";
 });
 </script>
 </body>
@@ -3900,7 +3889,7 @@ function obterDadosPacienteDeclaracao(){
     // =========================================================
     //
     // Usa o horário REAL registrado pelo CELK na fila do paciente.
-    // Esse é o valor da célula ..._cells_8_cell, por exemplo:
+    // Esse é o valor da célula ..._cells_9_cell, por exemplo:
     // "19/08/2026 - 07:25 BRT".
     //
 
