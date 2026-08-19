@@ -1637,6 +1637,18 @@ function preencherEvolucao(opcoes = {}){
         chegada = mTriagem[2];
     }
 
+    // --------------------------------------------------
+    // REGISTRO DO INÍCIO DO ATENDIMENTO
+    // --------------------------------------------------
+    // O horário "Atendido" deve ser o momento em que o
+    // botão 🩺 Atendimento / Clin / Ped é clicado.
+    registrarInicioAtendimentoRelatorio(
+        nome,
+        idade,
+        chegada,
+        horaAtual
+    );
+
     // ------------------------------
     // TRIAGEM / QUEIXA
     // ------------------------------
@@ -1963,10 +1975,8 @@ ${exameClin}
         '</div>'
     );
 
-    // O relatório agora é registrado SOMENTE quando o atendimento for
-    // efetivamente finalizado. Aqui salvamos os dados do paciente para
-    // garantir que nome + classificação já estejam prontos antes da saída.
-    registrarPacienteEmAtendimento(nome, idade, chegada);
+    // O horário de "Atendido" já foi registrado acima, no momento
+    // do clique em 🩺 Atendimento / Clin / Ped.
 
 }
     //--------------------------------------------------
@@ -2421,11 +2431,11 @@ function obterClassificacao(nomePaciente){
 
 // --------------------------------------------------
 // RELATÓRIO DO PLANTÃO — V39
-// PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
+// PRÉ-REGISTRO + CLASSIFICAÇÃO + INÍCIO DO ATENDIMENTO + FINALIZAÇÃO
 // --------------------------------------------------
 // A lógica abaixo mantém o paciente no relatório assim que ele é
-// identificado/aberto, mas só preenche "Atendido" e "Tempo" quando
-// o atendimento é efetivamente finalizado.
+// identificado/aberto e preenche "Atendido" no momento em que
+// o botão de atendimento é clicado.
 //
 // Isso permite que o relatório mostre:
 // ✓ pacientes já atendidos
@@ -2751,6 +2761,95 @@ function dadosPacienteAtual(){
     };
 }
 
+function registrarInicioAtendimentoRelatorio(
+    nome,
+    idade,
+    chegada,
+    horaAtendido
+){
+    nome = String(nome || "").trim();
+
+    if(!nome || nome === "Não encontrado"){
+        return false;
+    }
+
+    const lista = obterListaRelatorio();
+
+    let classificacao = obterClassificacaoDoCache(nome);
+
+    if(classificacao === "NÃO IDENTIFICADA"){
+        try{
+            classificacao = obterClassificacao(nome);
+        }catch(_){}
+    }
+
+    let paciente = localizarPacienteNoRelatorio(
+        lista,
+        nome,
+        chegada
+    );
+
+    if(!paciente){
+        paciente = {
+            numero: lista.length + 1,
+            nome: nome,
+            idade: String(idade || "").trim(),
+            classificacao: classificacao || "NÃO IDENTIFICADA",
+            chegada: String(chegada || "").trim(),
+            atendido: String(horaAtendido || "").trim(),
+            tempo: ""
+        };
+
+        paciente.tempo = calcularTempoRelatorio(
+            paciente.chegada,
+            new Date()
+        );
+
+        lista.push(paciente);
+    }else{
+        paciente.nome = nome;
+
+        if(idade){
+            paciente.idade = String(idade).trim();
+        }
+
+        if(chegada){
+            paciente.chegada = String(chegada).trim();
+        }
+
+        if(
+            classificacao &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
+            paciente.classificacao = classificacao;
+        }
+
+        // Só grava se ainda não houver horário.
+        // Assim um clique repetido não altera o horário original.
+        if(!paciente.atendido){
+            paciente.atendido = String(horaAtendido || "").trim();
+
+            paciente.tempo = calcularTempoRelatorio(
+                paciente.chegada,
+                new Date()
+            );
+        }
+    }
+
+    salvarListaRelatorio(lista);
+
+    console.log(
+        "[CELK RELATÓRIO V39] ATENDIMENTO INICIADO:",
+        paciente.nome,
+        "=>",
+        paciente.atendido,
+        "| espera:",
+        paciente.tempo
+    );
+
+    return true;
+}
+
 function registrarFinalizacaoRelatorio(){
     const dados = dadosPacienteAtual();
 
@@ -2824,12 +2923,19 @@ function registrarFinalizacaoRelatorio(){
             paciente.classificacao = classificacao;
         }
 
-        paciente.atendido = atendido;
+        // "Atendido" é o horário do clique em 🩺 Atendimento.
+        // A finalização não deve sobrescrever esse horário.
+        if(!paciente.atendido){
+            paciente.atendido = atendido;
+        }
 
-        paciente.tempo = calcularTempoRelatorio(
-            paciente.chegada,
-            agora
-        );
+        // O tempo de espera é calculado no início do atendimento.
+        if(!paciente.tempo){
+            paciente.tempo = calcularTempoRelatorio(
+                paciente.chegada,
+                agora
+            );
+        }
     }
 
     salvarListaRelatorio(lista);
@@ -6038,7 +6144,6 @@ tr.pendente td{
     <th>Classificação</th>
     <th>Chegada</th>
     <th>Atendido</th>
-    <th>Tempo</th>
 </tr>
 
 </thead>
@@ -6050,7 +6155,7 @@ tr.pendente td{
 
         html += `
 <tr>
-    <td colspan="7">
+    <td colspan="6">
         NENHUM PACIENTE REGISTRADO.
     </td>
 </tr>
@@ -6111,12 +6216,6 @@ tr.pendente td{
     <td>
         ${escaparHtmlRelatorio(
             paciente.atendido
-        )}
-    </td>
-
-    <td>
-        ${escaparHtmlRelatorio(
-            paciente.tempo
         )}
     </td>
 
