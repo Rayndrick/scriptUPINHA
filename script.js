@@ -2368,7 +2368,13 @@ function calcularTempoAtendimentoRelatorio(atendido,saida){
         saida
     );
 
-    return formatarTempoRelatorio(minutos);
+    if(minutos === "" || minutos == null){
+        return "";
+    }
+
+    // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+    // Exibe sempre a diferença em minutos.
+    return Number(minutos) + " min";
 }
 
 function calcularTempoTotalRelatorio(chegada,saida){
@@ -3131,13 +3137,17 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.classificacao = classificacao;
     }
 
-    // Se o início não foi capturado por algum motivo,
-    // mantemos compatibilidade e registramos ATENDIDO agora.
+    // ATENDIDO NUNCA deve ser preenchido com o horário da saída.
+    // Ele deve ter sido capturado exclusivamente no clique real
+    // do botão ATENDIMENTO.
     if(!paciente.atendido){
-        paciente.atendido = saida;
+        console.warn(
+            "[CELK RELATÓRIO] SAÍDA REGISTRADA SEM ATENDIDO CAPTURADO:",
+            paciente.nome
+        );
     }
 
-    // SAÍDA é o momento da finalização.
+    // SAÍDA = horário real da finalização confirmada pelo CELK.
     if(!paciente.saida){
         paciente.saida = saida;
     }
@@ -3147,15 +3157,15 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.atendido
     );
 
+    // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
     paciente.tempoAtendimento = calcularTempoAtendimentoRelatorio(
         paciente.atendido,
         paciente.saida
     );
 
-    paciente.tempoTotal = calcularTempoTotalRelatorio(
-        paciente.chegada,
-        paciente.saida
-    );
+    // Mantém o campo legado sincronizado com o novo conceito de
+    // tempo total de atendimento, para compatibilidade com registros antigos.
+    paciente.tempoTotal = paciente.tempoAtendimento;
 
     salvarListaRelatorio(lista);
 
@@ -3495,16 +3505,23 @@ function repararRelatorioExistente(){
                 }
             }
 
-            // Recalcula o T. Total sempre que já existirem Chegada e Saída.
-            // T. Total = Saída - Chegada.
-            if(paciente.chegada && paciente.saida){
-                const novoTotal = calcularTempoTotalRelatorio(
-                    paciente.chegada,
+            // Recalcula o TEMPO TOTAL DE ATENDIMENTO somente quando
+            // ATENDIDO e SAÍDA estiverem disponíveis.
+            // Regra: TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+            if(paciente.atendido && paciente.saida){
+                const novoTempoAtendimento = calcularTempoAtendimentoRelatorio(
+                    paciente.atendido,
                     paciente.saida
                 );
 
-                if(paciente.tempoTotal !== novoTotal){
-                    paciente.tempoTotal = novoTotal;
+                if(paciente.tempoAtendimento !== novoTempoAtendimento){
+                    paciente.tempoAtendimento = novoTempoAtendimento;
+                    alterou = true;
+                }
+
+                // Mantém compatibilidade com o campo antigo.
+                if(paciente.tempoTotal !== novoTempoAtendimento){
+                    paciente.tempoTotal = novoTempoAtendimento;
                     alterou = true;
                 }
             }
@@ -3550,6 +3567,7 @@ th{background:#f3f3f3;font-weight:700}
 td.nome{text-align:left}
 td.classificacao{font-weight:700}
 td.horario,td.tempo{white-space:nowrap}
+th:nth-child(8),td:nth-child(8){min-width:150px}
 #imprimir{margin-top:20px;padding:9px 16px;font-size:15px;cursor:pointer}
 @media print{#imprimir{display:none}body{margin:15mm}}
 </style>
@@ -3567,7 +3585,8 @@ td.horario,td.tempo{white-space:nowrap}
 <th>Classificação</th>
 <th>Chegada</th>
 <th>Atendido</th>
-<th>T. Total</th>
+<th>Saída</th>
+<th>Tempo Total de Atendimento</th>
 </tr>
 </thead>
 <tbody id="corpo">
@@ -3582,10 +3601,11 @@ ${lista.length ? lista.map(function(paciente){
 <td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
-<td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
+<td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
+<td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 </tr>`;
 }).join("") : `
-<tr><td colspan="7">NENHUM PACIENTE REGISTRADO.</td></tr>
+<tr><td colspan="8">NENHUM PACIENTE REGISTRADO.</td></tr>
 `}
 </tbody>
 </table>
@@ -3625,7 +3645,8 @@ window.addEventListener("message",function(evento){
             "<td class=\"classificacao\" style=\"background:"+cor+"\">"+esc(c)+"</td>"+
             "<td>"+esc(paciente.chegada)+"</td>"+
             "<td>"+esc(paciente.atendido)+"</td>"+
-            "<td>"+esc(paciente.tempoTotal)+"</td>"+
+            "<td>"+esc(paciente.saida)+"</td>"+
+            "<td>"+esc(paciente.tempoAtendimento)+"</td>"+
             "</tr>";
     }).join("") : "<tr><td colspan=\"9\">NENHUM PACIENTE REGISTRADO.</td></tr>";
 });
@@ -3641,8 +3662,8 @@ window.addEventListener("message",function(evento){
     aba.document.close();
 }
 
-// Instala a captura de ATENDIDO aqui para não alterar a estrutura
-// dos botões do Helper nem os outros módulos do V32.
+// Instala a captura de ATENDIDO no clique real do botão ATENDIMENTO,
+// sem alterar a estrutura dos botões do Helper nem os outros módulos.
 try{
     instalarCapturaInicioAtendimentoRelatorio();
 }catch(err){
