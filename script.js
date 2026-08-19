@@ -1,8 +1,8 @@
 // =========================================================
-// CELK HELPER — V32
+// CELK HELPER — V47
 // ATESTADO: fluxo direto pelo botão "Novo Documento"
 // =========================================================
-console.log("[CELK Helper V32] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+console.log("[CELK Helper V47] CARREGADO — RELATÓRIO CORRIGIDO");
 
 (function () {
 
@@ -2105,7 +2105,7 @@ function nomeDaLinha(tr){
     if(!tr) return "";
 
     const nomeCelula = tr.querySelector(
-        '[wicketpath*="_cells_6_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     if(nomeCelula){
@@ -2189,11 +2189,11 @@ function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
     const bolaCelula = tr.querySelector(
-        '[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_5_cell"]'
     );
 
     const nomeCelula = tr.querySelector(
-        '[wicketpath*="_cells_6_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     const bola = bolaCelula && bolaCelula.querySelector(
@@ -2418,24 +2418,23 @@ function extrairDadosDaLinhaPaciente(tr){
         };
     }
 
-    // Estrutura REAL da fila do CELK:
-    // cells_5 = CR / classificação (bola)
-    // cells_6 = paciente / nome
+    // Estrutura real observada na fila do CELK:
+    // cells_5 = classificação (bola)
+    // cells_6 = nome
     // cells_7 = idade
-    // cells_8 = TEMPO de espera
-    // cells_9 = CHEGADA (data/hora real da fila)
+    // cells_8 = chegada
     const nomeCelula = tr.querySelector(
-        '[wicketpath*="_cells_6_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     const idadeCelula = tr.querySelector(
-        '[wicketpath*="_cells_7_cell"]'
+        'td[wicketpath*="_cells_7_cell"]'
     );
 
     // CHEGADA = horário registrado pelo próprio CELK na fila.
     // Ex.: "19/08/2026 - 07:25 BRT"
     let chegadaCelula = tr.querySelector(
-        '[wicketpath*="_cells_9_cell"]'
+        'td[wicketpath*="_cells_8_cell"]'
     );
 
     // Fallback caso o Wicket altere a estrutura da linha.
@@ -2449,8 +2448,13 @@ function extrairDadosDaLinhaPaciente(tr){
         }) || null;
     }
 
+    // Estrutura confirmada da fila do CELK:
+    // cells_5 = classificação (bola)
+    // cells_6 = nome
+    // cells_7 = idade
+    // cells_8 = chegada
     const bolaCelula = tr.querySelector(
-        '[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_5_cell"]'
     );
 
     const nome = String(
@@ -2682,9 +2686,20 @@ function instalarCapturaCliquePaciente(){
             const tr = obterLinhaDoEventoCELK(evento);
             if(!tr) return;
 
-            // O clique pode acontecer no nome, na bola de classificação
-            // ou em qualquer outra célula da mesma linha.
-            // Não restringimos o evento a uma célula específica.
+            let alvoNome = null;
+
+            try{
+                if(evento.target && evento.target.closest){
+                    // O nome do paciente está em cells_6.
+                    // cells_5 é a classificação.
+                    alvoNome = evento.target.closest(
+                        'td[wicketpath*="_cells_6_cell"]'
+                    );
+                }
+            }catch(_){ }
+
+            if(!alvoNome) return;
+
             const dados = extrairDadosDaLinhaPaciente(tr);
 
             if(!dados.nome || !pareceNomePaciente(dados.nome)) return;
@@ -3329,18 +3344,7 @@ function instalarMonitorSucessoFinalizacao(){
 
             ultimaMensagem = agoraMs;
 
-            // Primeiro usa o paciente pendente salvo no momento em que
-            // a fila foi clicada. Ele sobrevive à troca de página do CELK.
-            let dados = null;
-            try{
-                dados = JSON.parse(
-                    localStorage.getItem("celk_paciente_pendente") || "null"
-                );
-            }catch(_){ dados = null; }
-
-            if(!dados || !dados.nome){
-                dados = dadosPacienteAtual();
-            }
+            let dados = dadosPacienteAtual();
 
             if(!dados || !dados.nome){
                 dados = localizarPendenteAnterior(agoraMs);
@@ -3490,6 +3494,20 @@ function repararRelatorioExistente(){
                     }
                 }
             }
+
+            // Recalcula o T. Total sempre que já existirem Chegada e Saída.
+            // T. Total = Saída - Chegada.
+            if(paciente.chegada && paciente.saida){
+                const novoTotal = calcularTempoTotalRelatorio(
+                    paciente.chegada,
+                    paciente.saida
+                );
+
+                if(paciente.tempoTotal !== novoTotal){
+                    paciente.tempoTotal = novoTotal;
+                    alterou = true;
+                }
+            }
         });
 
         if(alterou){
@@ -3549,9 +3567,6 @@ td.horario,td.tempo{white-space:nowrap}
 <th>Classificação</th>
 <th>Chegada</th>
 <th>Atendido</th>
-
-<th>Saída</th>
-<th>T. Atendimento</th>
 <th>T. Total</th>
 </tr>
 </thead>
@@ -3567,12 +3582,10 @@ ${lista.length ? lista.map(function(paciente){
 <td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
-<td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
-<td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
 </tr>`;
 }).join("") : `
-<tr><td colspan="9">NENHUM PACIENTE REGISTRADO.</td></tr>
+<tr><td colspan="7">NENHUM PACIENTE REGISTRADO.</td></tr>
 `}
 </tbody>
 </table>
@@ -3612,8 +3625,6 @@ window.addEventListener("message",function(evento){
             "<td class=\"classificacao\" style=\"background:"+cor+"\">"+esc(c)+"</td>"+
             "<td>"+esc(paciente.chegada)+"</td>"+
             "<td>"+esc(paciente.atendido)+"</td>"+
-            "<td>"+esc(paciente.saida)+"</td>"+
-            "<td>"+esc(paciente.tempoAtendimento)+"</td>"+
             "<td>"+esc(paciente.tempoTotal)+"</td>"+
             "</tr>";
     }).join("") : "<tr><td colspan=\"9\">NENHUM PACIENTE REGISTRADO.</td></tr>";
@@ -3889,7 +3900,7 @@ function obterDadosPacienteDeclaracao(){
     // =========================================================
     //
     // Usa o horário REAL registrado pelo CELK na fila do paciente.
-    // Esse é o valor da célula ..._cells_9_cell, por exemplo:
+    // Esse é o valor da célula ..._cells_8_cell, por exemplo:
     // "19/08/2026 - 07:25 BRT".
     //
 
