@@ -2127,39 +2127,59 @@ function salvarClassificacaoCache(nome,classificacao){
         }
     }catch(_){}
 
-    console.log("[CELK Helper V41] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // ESTRUTURA CONFIRMADA PELO DOM DO CELK:
-    // _cells_4_cell = classificação (TD com class="icon32 ball-*" )
-    // _cells_5_cell = nome do paciente.
-    // O ball-* fica no PRÓPRIO TD, portanto usamos matches() também.
+    // ESTRUTURA CONFIRMADA NOS TESTES DO CELK (12/08/2026):
+    // índice 3 = célula da classificação (icon32 ball-cor)
+    // índice 4 = célula do paciente/nome
+    // Não usar cells_4/cells_5 como regra principal, pois essa numeração
+    // varia conforme a tela/estrutura Wicket.
     const celulas = Array.from(tr.querySelectorAll("td,th"));
 
     const seletoresBola =
         '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],' +
         '[class~="ball-green"],[class~="ball-blue"]';
 
-    // 1) Wicketpath confirmado pelos testes do CELK.
+    // 1) Estrutura exata confirmada pelo teste do usuário.
+    const bolaCelula = celulas[3] || null;
+    const nomeCelula = celulas[4] || null;
+    const bolaExata = bolaCelula && bolaCelula.querySelector(seletoresBola);
+
+    if(bolaExata && nomeCelula){
+        const nome = String(
+            nomeCelula.innerText || nomeCelula.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        const classificacao = classeParaClassificacao(bolaExata);
+
+        if(
+            nome &&
+            pareceNomePaciente(nome) &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
+            return {nome, classificacao};
+        }
+    }
+
+    // 2) Fallback por wicketpath, caso o CELK mude a estrutura.
     const bolaCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"],th[wicketpath*="_cells_4_cell"]'
+        'td[wicketpath*="_cells_3_cell"]'
     );
     const nomeCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"],th[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_4_cell"]'
     );
 
-    const bolaWicket = bolaCelulaWicket && (
-        bolaCelulaWicket.matches(seletoresBola)
-            ? bolaCelulaWicket
-            : bolaCelulaWicket.querySelector(seletoresBola)
-    );
+    const bolaWicket = bolaCelulaWicket &&
+        bolaCelulaWicket.querySelector(seletoresBola);
 
     if(bolaWicket && nomeCelulaWicket){
         const nome = String(
-            nomeCelulaWicket.innerText || nomeCelulaWicket.textContent || ""
+            nomeCelulaWicket.innerText ||
+            nomeCelulaWicket.textContent || ""
         ).replace(/\s+/g," ").trim();
 
         const classificacao = classeParaClassificacao(bolaWicket);
@@ -2173,45 +2193,8 @@ function nomeClassificacaoPorEstruturaCELK(tr){
         }
     }
 
-    // 2) Estrutura confirmada do CELK:
-    // cells_4 = classificação | cells_5 = paciente.
-    const bolaCelula =
-        tr.querySelector('td[wicketpath*="_cells_4_cell"]') ||
-        celulas[3] || null;
-    const nomeCelula =
-        tr.querySelector('td[wicketpath*="_cells_5_cell"]') ||
-        celulas[4] || null;
-
-    const bolaPorIndice = bolaCelula && (
-        bolaCelula.matches(seletoresBola)
-            ? bolaCelula
-            : bolaCelula.querySelector(seletoresBola)
-    );
-
-    if(bolaPorIndice && nomeCelula){
-        const nome = String(
-            nomeCelula.innerText || nomeCelula.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bolaPorIndice);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            return {nome, classificacao};
-        }
-    }
-
-    // 3) Fallback genérico: procura a própria bolinha e depois o nome.
-    let bola = (tr.matches && tr.matches(seletoresBola)) ? tr : null;
-
-    if(!bola){
-        bola = Array.from(
-            tr.querySelectorAll("td,th,div,span")
-        ).find(el => el.matches && el.matches(seletoresBola)) || null;
-    }
+    // 3) Fallback genérico: encontra a bolinha e procura a célula de nome.
+    const bola = tr.querySelector(seletoresBola);
 
     if(!bola) return null;
 
@@ -2220,6 +2203,7 @@ function nomeClassificacaoPorEstruturaCELK(tr){
 
     const indiceBola = celulas.indexOf(bola.closest("td,th"));
 
+    // Normalmente o nome vem imediatamente depois da classificação.
     for(let i = Math.max(0, indiceBola + 1); i < celulas.length; i++){
         const nome = String(
             celulas[i].innerText || celulas[i].textContent || ""
@@ -2230,6 +2214,7 @@ function nomeClassificacaoPorEstruturaCELK(tr){
         }
     }
 
+    // Último fallback: usa o extrator genérico já existente.
     const nome = nomeDaLinha(tr);
     if(nome){
         return {nome, classificacao};
@@ -2267,15 +2252,10 @@ function capturarClassificacaoDaLinha(tr){
         return true;
     }
 
-    const seletorBola =
+    const bola=tr.querySelector(
         '.icon32.ball-red, .icon32.ball-orange, .icon32.ball-yellow, .icon32.ball-green, .icon32.ball-blue, ' +
-        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]';
-
-    const bola =
-        (tr.matches && tr.matches(seletorBola) ? tr : null) ||
-        Array.from(tr.querySelectorAll("td,th,div,span")).find(el =>
-            el.matches && el.matches(seletorBola)
-        ) || null;
+        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]'
+    );
 
     if(!bola) return false;
 
@@ -2295,13 +2275,9 @@ function extrairMapaClassificacoesDaTabela(){
     const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
 
     for(const tr of linhas){
-        const seletorBola =
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]';
-        const bola =
-            (tr.matches && tr.matches(seletorBola) ? tr : null) ||
-            Array.from(tr.querySelectorAll("td,th,div,span")).find(el =>
-                el.matches && el.matches(seletorBola)
-            ) || null;
+        const bola=tr.querySelector(
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+        );
         if(!bola) continue;
 
         const classificacao=classeParaClassificacao(bola);
@@ -2339,6 +2315,65 @@ function sincronizarClassificacoesDaTabela(){
     return extrairMapaClassificacoesDaTabela();
 }
 
+// CAPTURA DIRETA DA LINHA CELK
+// O CELK usa, na linha da tabela:
+// cells_4 = classificação (ball-cor)
+// cells_5 = nome
+// cells_6 = idade
+// cells_8 = chegada
+// Capturamos tudo no mousedown, antes da navegação remover a linha.
+function capturarDadosDiretosDaLinhaCELK(tr){
+    if(!tr) return false;
+
+    try{
+        const celNome = tr.querySelector('[wicketpath*="_cells_5"]');
+        const celIdade = tr.querySelector('[wicketpath*="_cells_6"]');
+        const celClass = tr.querySelector('[wicketpath*="_cells_4"]');
+        const celChegada = tr.querySelector('[wicketpath*="_cells_8"]');
+
+        const nome = String(celNome?.innerText || celNome?.textContent || '').replace(/\\s+/g,' ').trim();
+        const idade = String(celIdade?.innerText || celIdade?.textContent || '').replace(/\\s+/g,' ').trim();
+        const chegadaTexto = String(celChegada?.innerText || celChegada?.textContent || '').replace(/\\s+/g,' ').trim();
+
+        if(!nome) return false;
+
+        const bola = celClass?.querySelector(
+            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+        ) || celClass?.querySelector('[class*="ball-"]');
+
+        const classificacao = classeParaClassificacao(bola);
+
+        let chegada = chegadaTexto;
+        const m = chegada.match(/(\\d{2}\\/\\d{2}\\/\\d{4})\\s*-\\s*(\\d{2}:\\d{2})/);
+        if(m) chegada = m[2];
+
+        if(classificacao !== 'NÃO IDENTIFICADA'){
+            salvarClassificacaoCache(nome, classificacao);
+        }
+
+        salvarPacientePendente(
+            nome,
+            idade,
+            chegada,
+            classificacao
+        );
+
+        console.log(
+            '[CELK Helper] CAPTURA DIRETA:',
+            nome,
+            '| IDADE:', idade,
+            '| CLASSIFICAÇÃO:', classificacao,
+            '| CHEGADA:', chegada
+        );
+
+        return true;
+    }catch(err){
+        console.warn('[CELK Helper] FALHA NA CAPTURA DIRETA:', err);
+        return false;
+    }
+}
+
 // Captura ANTES da navegação. Este é o ponto principal da correção:
 // quando o usuário clica no paciente, o CELK pode remover a linha da tabela
 // imediatamente. A classificação precisa estar salva antes disso.
@@ -2350,25 +2385,14 @@ function instalarCapturaAntecipadaClassificacao(){
         try{
             const alvo=obterLinhaDoEventoCELK(evento);
             if(alvo){
+                // Primeiro captura nome + idade + classificação + chegada
+                // diretamente das cells da linha, antes da navegação do CELK.
+                capturarDadosDiretosDaLinhaCELK(alvo);
                 capturarClassificacaoDaLinha(alvo);
                 const exata=nomeClassificacaoPorEstruturaCELK(alvo);
                 if(exata){
                     salvarClassificacaoCache(exata.nome,exata.classificacao);
-
-                    const chegadaCelula = alvo.querySelector(
-                        'td[wicketpath*="_cells_8_cell"]'
-                    );
-                    const chegada = chegadaCelula
-                        ? (String(chegadaCelula.innerText || chegadaCelula.textContent || "")
-                            .match(/\d{2}:\d{2}/) || [""])[0]
-                        : "";
-
-                    salvarPacientePendente(
-                        exata.nome,"",chegada,exata.classificacao
-                    );
-                    preRegistrarNoRelatorio(
-                        exata.nome,"",chegada,exata.classificacao
-                    );
+                    salvarPacientePendente(exata.nome,"","",exata.classificacao);
                 }else{
                     const bola=alvo.querySelector(
                         '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
@@ -2378,15 +2402,7 @@ function instalarCapturaAntecipadaClassificacao(){
                     const classificacao=classeParaClassificacao(bola);
                     if(nome && classificacao!=="NÃO IDENTIFICADA"){
                         salvarClassificacaoCache(nome,classificacao);
-                        const chegadaCelula = alvo.querySelector(
-                            'td[wicketpath*="_cells_8_cell"]'
-                        );
-                        const chegada = chegadaCelula
-                            ? (String(chegadaCelula.innerText || chegadaCelula.textContent || "")
-                                .match(/\d{2}:\d{2}/) || [""])[0]
-                            : "";
-                        salvarPacientePendente(nome,"",chegada,classificacao);
-                        preRegistrarNoRelatorio(nome,"",chegada,classificacao);
+                        salvarPacientePendente(nome,"","",classificacao);
                     }
                 }
                 const tabela=alvo.closest("table");
@@ -2466,7 +2482,7 @@ function obterClassificacao(nomePaciente){
 }
 
 // --------------------------------------------------
-// RELATÓRIO DO PLANTÃO — V41
+// RELATÓRIO DO PLANTÃO — V39
 // PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
 // --------------------------------------------------
 // A lógica abaixo mantém o paciente no relatório assim que ele é
@@ -2558,7 +2574,7 @@ function atualizarClassificacaoNoRelatorio(nome,classificacao){
     });
     if(alterou){
         salvarListaRelatorio(lista);
-        console.log("[CELK RELATÓRIO V41] CLASSIFICAÇÃO ATUALIZADA:",nome,"=>",classificacao);
+        console.log("[CELK RELATÓRIO V39] CLASSIFICAÇÃO ATUALIZADA:",nome,"=>",classificacao);
     }
 }
 
@@ -2657,7 +2673,7 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V41] PACIENTE PRÉ-REGISTRADO:",
+        "[CELK RELATÓRIO V39] PACIENTE PRÉ-REGISTRADO:",
         paciente.nome,
         "=>",
         paciente.classificacao
@@ -2706,7 +2722,7 @@ function salvarPacientePendente(
     );
 
     console.log(
-        "[CELK RELATÓRIO V41] PRÉ-REGISTRO:",
+        "[CELK RELATÓRIO V39] PRÉ-REGISTRO:",
         dados.nome,
         "=>",
         dados.classificacao
@@ -2802,7 +2818,7 @@ function registrarFinalizacaoRelatorio(){
 
     if(!dados || !dados.nome){
         console.warn(
-            "[CELK RELATÓRIO V41] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
+            "[CELK RELATÓRIO V39] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
         return false;
     }
@@ -2881,7 +2897,7 @@ function registrarFinalizacaoRelatorio(){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V41] FINALIZAÇÃO REGISTRADA:",
+        "[CELK RELATÓRIO V39] FINALIZAÇÃO REGISTRADA:",
         paciente.nome,
         "=>",
         paciente.classificacao,
@@ -2972,7 +2988,7 @@ function instalarCapturaFinalizacaoRelatorio(){
         }catch(err){
 
             console.error(
-                "[CELK RELATÓRIO V41] ERRO NA CAPTURA DA FINALIZAÇÃO:",
+                "[CELK RELATÓRIO V39] ERRO NA CAPTURA DA FINALIZAÇÃO:",
                 err
             );
 
@@ -2993,7 +3009,7 @@ function instalarCapturaFinalizacaoRelatorio(){
     );
 
     console.log(
-        "[CELK RELATÓRIO V41] CAPTURA DE FINALIZAÇÃO INSTALADA."
+        "[CELK RELATÓRIO V39] CAPTURA DE FINALIZAÇÃO INSTALADA."
     );
 }
 
@@ -6019,10 +6035,6 @@ td.classificacao{
     font-weight:700;
 }
 
-tr.pendente td{
-    background:#fff;
-}
-
 #imprimir{
     margin-top:20px;
     padding:10px 18px;
@@ -6113,11 +6125,8 @@ tr.pendente td{
                     classificacao
                 );
 
-            const pendente =
-                !paciente.atendido;
-
             html += `
-<tr class="${pendente ? "pendente" : ""}">
+<tr>
 
     <td>
         ${escaparHtmlRelatorio(
@@ -6151,6 +6160,7 @@ tr.pendente td{
             paciente.chegada
         )}
     </td>
+
 
 </tr>
 `;
@@ -6191,7 +6201,7 @@ document
     aba.document.close();
 
     console.log(
-        "[CELK RELATÓRIO V41] RELATÓRIO ABERTO:",
+        "[CELK RELATÓRIO V39] RELATÓRIO ABERTO:",
         pacientes.length,
         "pacientes"
     );
