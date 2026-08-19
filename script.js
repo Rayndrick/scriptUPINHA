@@ -2031,7 +2031,7 @@ function iniciarAtualizacao(){
 // MANTÉM A ESTRUTURA ORIGINAL DO RELATÓRIO E ACRESCENTA:
 //   CHEGADA        = horário da chegada na fila do CELK
 //   ATENDIDO       = momento em que o Helper inicia o atendimento
-//   TEMPO          = cálculo interno (não exibido no relatório)
+//   TEMPO          = ATENDIDO - CHEGADA
 //   SAÍDA          = momento em que o atendimento é finalizado
 //   T. ATENDIMENTO = SAÍDA - ATENDIDO
 //   T. TOTAL       = SAÍDA - CHEGADA
@@ -2105,7 +2105,7 @@ function nomeDaLinha(tr){
     if(!tr) return "";
 
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     if(nomeCelula){
@@ -2189,11 +2189,11 @@ function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
     const bolaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
+        'td[wicketpath*="_cells_5_cell"]'
     );
 
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     const bola = bolaCelula && bolaCelula.querySelector(
@@ -2418,12 +2418,17 @@ function extrairDadosDaLinhaPaciente(tr){
         };
     }
 
+    // Estrutura real observada na fila do CELK:
+    // cells_5 = classificação (bola)
+    // cells_6 = nome
+    // cells_7 = idade
+    // cells_8 = chegada
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"]'
+        'td[wicketpath*="_cells_6_cell"]'
     );
 
     const idadeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_6_cell"]'
+        'td[wicketpath*="_cells_7_cell"]'
     );
 
     // CHEGADA = horário registrado pelo próprio CELK na fila.
@@ -3130,23 +3135,20 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.saida = saida;
     }
 
-    // TEMPO não é mais exibido no relatório.
-    // Os dois tempos exibidos são:
-    // T. Atendimento = SAÍDA - ATENDIDO
-    // T. Total       = SAÍDA - CHEGADA
-    paciente.tempo = "";
+    paciente.tempo = calcularTempoEntreHorarios(
+        paciente.chegada,
+        paciente.atendido
+    );
 
-    paciente.tempoAtendimento =
-        calcularTempoAtendimentoRelatorio(
-            paciente.atendido,
-            paciente.saida
-        );
+    paciente.tempoAtendimento = calcularTempoAtendimentoRelatorio(
+        paciente.atendido,
+        paciente.saida
+    );
 
-    paciente.tempoTotal =
-        calcularTempoTotalRelatorio(
-            paciente.chegada,
-            paciente.saida
-        );
+    paciente.tempoTotal = calcularTempoTotalRelatorio(
+        paciente.chegada,
+        paciente.saida
+    );
 
     salvarListaRelatorio(lista);
 
@@ -3269,12 +3271,13 @@ function instalarCapturaFinalizacaoRelatorio(){
         }
     }
 
-    // A saída NÃO é registrada no pointerdown/mousedown/click.
-    // O CELK pode disparar esses eventos antes de concluir o atendimento.
-    // A saída é registrada pelo monitor de sucesso abaixo, no momento em
-    // que aparece "ATENDIMENTO FINALIZADO COM SUCESSO".
+    // IMPORTANTE:
+    // Não registrar a saída no clique/pointerdown.
+    // Esses eventos acontecem ANTES de o CELK concluir o atendimento.
+    // A saída será registrada exclusivamente quando o CELK informar:
+    // "ATENDIMENTO FINALIZADO COM SUCESSO".
     console.log(
-        "[CELK RELATÓRIO] CAPTURA DE SAÍDA ARMADA — aguardando confirmação real do CELK."
+        "[CELK RELATÓRIO] SAÍDA: aguardando confirmação real de finalização do CELK."
     );
 }
 
@@ -3348,6 +3351,26 @@ function instalarMonitorSucessoFinalizacao(){
             }
 
             registrarFinalizacaoRelatorio(dados);
+
+            // Segunda verificação curta para casos em que o CELK troca a tela
+            // imediatamente após mostrar a confirmação.
+            setTimeout(function(){
+                try{
+                    const novamente = dadosPacienteAtual() || localizarPendenteAnterior(Date.now());
+                    if(novamente && novamente.nome){
+                        const listaAtual = obterListaRelatorio();
+                        const alvoAtual = listaAtual.find(function(item){
+                            return (
+                                normalizarClassificacaoTexto(item.nome) ===
+                                normalizarClassificacaoTexto(novamente.nome)
+                            ) && !item.saida;
+                        });
+                        if(alvoAtual){
+                            registrarFinalizacaoRelatorio(novamente);
+                        }
+                    }
+                }catch(_){}
+            },250);
         }catch(err){
             console.error(
                 "[CELK RELATÓRIO] ERRO NO MONITOR DE SUCESSO:",
@@ -3402,7 +3425,83 @@ function obterCorClassificacaoRelatorio(classificacao){
     }
 }
 
+
+function repararRelatorioExistente(){
+    try{
+        const lista = obterListaRelatorio();
+        if(!Array.isArray(lista) || !lista.length) return;
+
+        let historico = [];
+        try{
+            historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+        }catch(_){
+            historico = [];
+        }
+
+        if(!Array.isArray(historico)) historico = [];
+
+        let alterou = false;
+
+        lista.forEach(function(paciente){
+            const chave = normalizarClassificacaoTexto(paciente.nome);
+
+            // Recupera classificação já capturada na fila.
+            if(
+                (!paciente.classificacao ||
+                 paciente.classificacao === "NÃO IDENTIFICADA")
+            ){
+                const cache = obterClassificacaoDoCache(paciente.nome);
+                if(cache !== "NÃO IDENTIFICADA"){
+                    paciente.classificacao = cache;
+                    alterou = true;
+                }
+            }
+
+            // Recupera chegada do histórico do clique na fila.
+            if(!paciente.chegada){
+                for(let i=historico.length-1;i>=0;i--){
+                    const h = historico[i];
+                    if(
+                        h &&
+                        h.nome &&
+                        normalizarClassificacaoTexto(h.nome) === chave &&
+                        /^\d{1,2}:\d{2}$/.test(String(h.chegada || "").trim())
+                    ){
+                        paciente.chegada = String(h.chegada).trim();
+
+                        if(
+                            h.classificacao &&
+                            h.classificacao !== "NÃO IDENTIFICADA" &&
+                            (
+                                !paciente.classificacao ||
+                                paciente.classificacao === "NÃO IDENTIFICADA"
+                            )
+                        ){
+                            paciente.classificacao = h.classificacao;
+                        }
+
+                        alterou = true;
+                        break;
+                    }
+                }
+            }
+        });
+
+        if(alterou){
+            salvarListaRelatorio(lista);
+        }
+    }catch(err){
+        console.warn(
+            "[CELK RELATÓRIO] FALHA AO REPARAR DADOS EXISTENTES:",
+            err
+        );
+    }
+}
+
 function abrirRelatorio(){
+    repararRelatorioExistente();
     const pacientes = obterListaRelatorio();
     const aba = window.open("","_blank");
 
@@ -3447,6 +3546,7 @@ td.horario,td.tempo{white-space:nowrap}
 <th>Classificação</th>
 <th>Chegada</th>
 <th>Atendido</th>
+
 <th>Saída</th>
 <th>T. Atendimento</th>
 <th>T. Total</th>
@@ -3464,6 +3564,7 @@ ${lista.length ? lista.map(function(paciente){
 <td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
+<td class="tempo">${escaparHtmlRelatorio(paciente.tempo)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
