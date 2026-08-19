@@ -2373,8 +2373,8 @@ function calcularTempoAtendimentoRelatorio(atendido,saida){
     }
 
     // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
-    // Exibe sempre a diferença em minutos.
-    return Number(minutos) + " min";
+    // Sempre exibe o valor em minutos.
+    return minutos + " min";
 }
 
 function calcularTempoTotalRelatorio(chegada,saida){
@@ -3137,12 +3137,12 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.classificacao = classificacao;
     }
 
-    // ATENDIDO NUNCA deve ser preenchido com o horário da saída.
-    // Ele deve ter sido capturado exclusivamente no clique real
-    // do botão ATENDIMENTO.
+    // ATENDIDO NÃO pode ser preenchido pela SAÍDA.
+    // Ele deve existir somente se foi capturado no clique real
+    // de ATENDIMENTO.
     if(!paciente.atendido){
         console.warn(
-            "[CELK RELATÓRIO] SAÍDA REGISTRADA SEM ATENDIDO CAPTURADO:",
+            "[CELK RELATÓRIO] SAÍDA registrada sem ATENDIDO capturado:",
             paciente.nome
         );
     }
@@ -3157,15 +3157,15 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.atendido
     );
 
-    // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
     paciente.tempoAtendimento = calcularTempoAtendimentoRelatorio(
         paciente.atendido,
         paciente.saida
     );
 
-    // Mantém o campo legado sincronizado com o novo conceito de
-    // tempo total de atendimento, para compatibilidade com registros antigos.
-    paciente.tempoTotal = paciente.tempoAtendimento;
+    paciente.tempoTotal = calcularTempoTotalRelatorio(
+        paciente.chegada,
+        paciente.saida
+    );
 
     salvarListaRelatorio(lista);
 
@@ -3465,13 +3465,24 @@ function repararRelatorioExistente(){
             const chave = normalizarClassificacaoTexto(paciente.nome);
 
             // Recupera classificação já capturada na fila.
+            // Primeiro usa o cache e, se necessário, consulta a tabela
+            // atual do CELK antes de abrir o relatório.
             if(
                 (!paciente.classificacao ||
                  paciente.classificacao === "NÃO IDENTIFICADA")
             ){
-                const cache = obterClassificacaoDoCache(paciente.nome);
-                if(cache !== "NÃO IDENTIFICADA"){
-                    paciente.classificacao = cache;
+                let classificacao = obterClassificacaoDoCache(paciente.nome);
+
+                if(classificacao === "NÃO IDENTIFICADA"){
+                    try{
+                        classificacao = obterClassificacao(paciente.nome);
+                    }catch(_){
+                        classificacao = "NÃO IDENTIFICADA";
+                    }
+                }
+
+                if(classificacao !== "NÃO IDENTIFICADA"){
+                    paciente.classificacao = classificacao;
                     alterou = true;
                 }
             }
@@ -3505,9 +3516,10 @@ function repararRelatorioExistente(){
                 }
             }
 
-            // Recalcula o TEMPO TOTAL DE ATENDIMENTO somente quando
-            // ATENDIDO e SAÍDA estiverem disponíveis.
-            // Regra: TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+            // Recalcula o T. Total sempre que já existirem Chegada e Saída.
+            // T. Total = Saída - Chegada.
+            // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+            // Não usar CHEGADA para esse campo.
             if(paciente.atendido && paciente.saida){
                 const novoTempoAtendimento = calcularTempoAtendimentoRelatorio(
                     paciente.atendido,
@@ -3519,9 +3531,21 @@ function repararRelatorioExistente(){
                     alterou = true;
                 }
 
-                // Mantém compatibilidade com o campo antigo.
+                // Compatibilidade com registros antigos.
                 if(paciente.tempoTotal !== novoTempoAtendimento){
                     paciente.tempoTotal = novoTempoAtendimento;
+                    alterou = true;
+                }
+            }else{
+                // Limpa valores antigos/incorretos que possam ter sido
+                // calculados antes da separação ATENDIDO/SAÍDA.
+                if(paciente.tempoAtendimento){
+                    paciente.tempoAtendimento = "";
+                    alterou = true;
+                }
+
+                if(paciente.tempoTotal){
+                    paciente.tempoTotal = "";
                     alterou = true;
                 }
             }
@@ -3567,7 +3591,6 @@ th{background:#f3f3f3;font-weight:700}
 td.nome{text-align:left}
 td.classificacao{font-weight:700}
 td.horario,td.tempo{white-space:nowrap}
-th:nth-child(8),td:nth-child(8){min-width:150px}
 #imprimir{margin-top:20px;padding:9px 16px;font-size:15px;cursor:pointer}
 @media print{#imprimir{display:none}body{margin:15mm}}
 </style>
@@ -3605,7 +3628,7 @@ ${lista.length ? lista.map(function(paciente){
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 </tr>`;
 }).join("") : `
-<tr><td colspan="8">NENHUM PACIENTE REGISTRADO.</td></tr>
+<tr><td colspan="7">NENHUM PACIENTE REGISTRADO.</td></tr>
 `}
 </tbody>
 </table>
@@ -3662,8 +3685,8 @@ window.addEventListener("message",function(evento){
     aba.document.close();
 }
 
-// Instala a captura de ATENDIDO no clique real do botão ATENDIMENTO,
-// sem alterar a estrutura dos botões do Helper nem os outros módulos.
+// Instala a captura de ATENDIDO aqui para não alterar a estrutura
+// dos botões do Helper nem os outros módulos do V32.
 try{
     instalarCapturaInicioAtendimentoRelatorio();
 }catch(err){
