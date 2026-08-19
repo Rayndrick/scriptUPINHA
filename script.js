@@ -2345,8 +2345,12 @@ function capturarDadosDiretosDaLinhaCELK(tr){
         const classificacao = classeParaClassificacao(bola);
 
         let chegada = chegadaTexto;
-        const m = chegada.match(/(\\d{2}\\/\\d{2}\\/\\d{4})\\s*-\\s*(\\d{2}:\\d{2})/);
-        if(m) chegada = m[2];
+        // Extrai apenas o horário da chegada sem usar RegExp, evitando erro de sintaxe no CELK.
+        const partesChegada = String(chegada).split(' - ');
+        if(partesChegada.length > 1){
+            const horario = partesChegada[partesChegada.length - 1].trim();
+            if(/^\d{2}:\d{2}$/.test(horario)) chegada = horario;
+        }
 
         if(classificacao !== 'NÃO IDENTIFICADA'){
             salvarClassificacaoCache(nome, classificacao);
