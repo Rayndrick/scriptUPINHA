@@ -2061,26 +2061,46 @@ function normalizarClassificacaoTexto(valor){
 function classeParaClassificacao(elemento){
     if(!elemento) return "NÃO IDENTIFICADA";
 
-    const classes = String(elemento.className || "").toLowerCase();
+    // O CELK usa elementos como:
+    // <div class="icon32 ball-orange">[cell]</div>
+    // A classificação pode estar no próprio elemento ou em um descendente.
+    const elementos = [elemento];
 
-    if(/(?:^|\s)ball-red(?:\s|$)/.test(classes)) return "VERMELHO";
-    if(/(?:^|\s)ball-orange(?:\s|$)/.test(classes)) return "LARANJA";
-    if(/(?:^|\s)ball-yellow(?:\s|$)/.test(classes)) return "AMARELO";
-    if(/(?:^|\s)ball-green(?:\s|$)/.test(classes)) return "VERDE";
-    if(/(?:^|\s)ball-blue(?:\s|$)/.test(classes)) return "AZUL";
+    try{
+        elementos.push(...elemento.querySelectorAll(
+            '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"]'
+        ));
+    }catch(_){ }
 
-    const conteudo = normalizarClassificacaoTexto(
-        elemento.textContent ||
-        elemento.getAttribute("title") ||
-        elemento.getAttribute("aria-label") ||
-        elemento.getAttribute("data-title") || ""
-    );
+    for(const el of elementos){
+        const classes = String(
+            el.className ||
+            (el.getAttribute && el.getAttribute("class")) ||
+            ""
+        ).toLowerCase();
 
-    if(/VERMELHO|RED/.test(conteudo)) return "VERMELHO";
-    if(/LARANJA|ORANGE/.test(conteudo)) return "LARANJA";
-    if(/AMARELO|YELLOW/.test(conteudo)) return "AMARELO";
-    if(/VERDE|GREEN/.test(conteudo)) return "VERDE";
-    if(/AZUL|BLUE/.test(conteudo)) return "AZUL";
+        if(/(?:^|\s)ball-red(?:\s|$)/.test(classes)) return "VERMELHO";
+        if(/(?:^|\s)ball-orange(?:\s|$)/.test(classes)) return "LARANJA";
+        if(/(?:^|\s)ball-yellow(?:\s|$)/.test(classes)) return "AMARELO";
+        if(/(?:^|\s)ball-green(?:\s|$)/.test(classes)) return "VERDE";
+        if(/(?:^|\s)ball-blue(?:\s|$)/.test(classes)) return "AZUL";
+    }
+
+    // Fallback: tenta o texto/atributos do próprio elemento.
+    for(const el of elementos){
+        const conteudo = normalizarClassificacaoTexto(
+            (el.textContent || "") + " " +
+            (el.getAttribute ? (el.getAttribute("title") || "") : "") + " " +
+            (el.getAttribute ? (el.getAttribute("aria-label") || "") : "") + " " +
+            (el.getAttribute ? (el.getAttribute("data-title") || "") : "")
+        );
+
+        if(/\bVERMELHO\b|\bRED\b/.test(conteudo)) return "VERMELHO";
+        if(/\bLARANJA\b|\bORANGE\b/.test(conteudo)) return "LARANJA";
+        if(/\bAMARELO\b|\bYELLOW\b/.test(conteudo)) return "AMARELO";
+        if(/\bVERDE\b|\bGREEN\b/.test(conteudo)) return "VERDE";
+        if(/\bAZUL\b|\bBLUE\b/.test(conteudo)) return "AZUL";
+    }
 
     return "NÃO IDENTIFICADA";
 }
@@ -2185,37 +2205,113 @@ function salvarClassificacaoCache(nome,classificacao){
     }catch(_){ }
 }
 
-function localizarBolaClassificacaoNaLinha(tr){
-    if(!tr) return null;
-    const candidatos = Array.from(tr.querySelectorAll(
-        '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"],.icon32'
-    ));
-    return candidatos.find(function(el){
-        const classes = String(el.className || "").toLowerCase();
-        return /(?:^|\s)ball-(?:red|orange|yellow|green|blue)(?:\s|$)/.test(classes);
-    }) || null;
-}
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
-    const bola = localizarBolaClassificacaoNaLinha(tr);
-    const nome = nomeDaLinha(tr);
-    if(!bola || !nome || !pareceNomePaciente(nome)) return null;
-    const classificacao = classeParaClassificacao(bola);
-    if(classificacao === "NÃO IDENTIFICADA") return null;
-    return {nome,classificacao};
+
+    // A classificação do CELK foi observada no elemento da própria célula,
+    // por exemplo: div.wicketpath="..._cells_5_cell" class="icon32 ball-orange".
+    const bolaCelula =
+        tr.querySelector('[wicketpath*="_cells_5_cell"][class*="ball-"]') ||
+        tr.querySelector('[wicketpath*="_cells_4_cell"][class*="ball-"]') ||
+        tr;
+
+    const nomeCelula = tr.querySelector(
+        'td[wicketpath*="_cells_5_cell"]'
+    );
+
+    const bola = bolaCelula && bolaCelula.querySelector(
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+    );
+
+    if(bola && nomeCelula){
+        const nome = String(
+            nomeCelula.innerText || nomeCelula.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        const classificacao = classeParaClassificacao(bola);
+
+        if(
+            nome &&
+            pareceNomePaciente(nome) &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
+            return {nome,classificacao};
+        }
+    }
+
+    return null;
 }
+
 function capturarClassificacaoDaLinha(tr){
-    if(!tr) return false;
-    const bola = localizarBolaClassificacaoNaLinha(tr);
-    if(!bola) return false;
-    const classificacao = classeParaClassificacao(bola);
-    if(classificacao === "NÃO IDENTIFICADA") return false;
-    const nome = nomeDaLinha(tr);
-    if(!nome || !pareceNomePaciente(nome)) return false;
-    salvarClassificacaoCache(nome,classificacao);
-    console.log("[CELK RELATÓRIO] CLASSIFICAÇÃO CAPTURADA ANTES DA NAVEGAÇÃO:",nome,"=>",classificacao);
-    return true;
+    if(!tr) return "NÃO IDENTIFICADA";
+
+    // PRIMEIRA TENTATIVA: exatamente a estrutura mostrada no CELK.
+    // Ex.: <div wicketpath="..._cells_5_cell" class="icon32 ball-orange">
+    const seletoresClassificacao = [
+        '[wicketpath*="_cells_5_cell"][class*="ball-"]',
+        '[wicketpath*="_cells_4_cell"][class*="ball-"]',
+        '.icon32.ball-red',
+        '.icon32.ball-orange',
+        '.icon32.ball-yellow',
+        '.icon32.ball-green',
+        '.icon32.ball-blue',
+        '[class~="ball-red"]',
+        '[class~="ball-orange"]',
+        '[class~="ball-yellow"]',
+        '[class~="ball-green"]',
+        '[class~="ball-blue"]'
+    ];
+
+    for(const seletor of seletoresClassificacao){
+        try{
+            const elemento = tr.querySelector(seletor);
+            if(!elemento) continue;
+
+            const classificacao = classeParaClassificacao(elemento);
+
+            if(classificacao !== "NÃO IDENTIFICADA"){
+                const nome = nomeDaLinha(tr);
+
+                if(nome){
+                    salvarClassificacaoCache(nome,classificacao);
+
+                    console.log(
+                        "[CELK RELATÓRIO] CLASSIFICAÇÃO CAPTURADA:",
+                        nome,
+                        "=>",
+                        classificacao,
+                        "| ELEMENTO:",
+                        elemento
+                    );
+                }
+
+                return classificacao;
+            }
+        }catch(_){ }
+    }
+
+    // Último fallback: procura qualquer elemento da linha que tenha ball-*.
+    try{
+        const todos = tr.querySelectorAll('[class*="ball-"]');
+
+        for(const elemento of todos){
+            const classificacao = classeParaClassificacao(elemento);
+
+            if(classificacao !== "NÃO IDENTIFICADA"){
+                const nome = nomeDaLinha(tr);
+
+                if(nome){
+                    salvarClassificacaoCache(nome,classificacao);
+                }
+
+                return classificacao;
+            }
+        }
+    }catch(_){ }
+
+    return "NÃO IDENTIFICADA";
 }
+
 function sincronizarClassificacoesDaTabela(){
     const linhas = Array.from(
         document.querySelectorAll("table tbody tr, table tr")
@@ -2258,7 +2354,10 @@ function obterClassificacao(nomePaciente){
 
         if(!nomeLinha || nomeLinha !== nome) continue;
 
-        const bola = localizarBolaClassificacaoNaLinha(tr);
+        const bola = tr.querySelector(
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+        );
+
         const classificacao = classeParaClassificacao(bola);
 
         if(classificacao !== "NÃO IDENTIFICADA"){
@@ -2398,11 +2497,26 @@ function extrairDadosDaLinhaPaciente(tr){
         'td[wicketpath*="_cells_6_cell"]'
     );
 
-    const chegadaCelula = tr.querySelector(
+    // CHEGADA = horário registrado pelo próprio CELK na fila.
+    // Ex.: "19/08/2026 - 07:25 BRT"
+    let chegadaCelula = tr.querySelector(
         'td[wicketpath*="_cells_8_cell"]'
     );
 
-    const bola = localizarBolaClassificacaoNaLinha(tr);
+    // Fallback caso o Wicket altere a estrutura da linha.
+    if(!chegadaCelula){
+        chegadaCelula = [...tr.querySelectorAll("td")].find(function(td){
+            const txt = String(
+                td.innerText || td.textContent || ""
+            ).replace(/\s+/g," ").trim();
+
+            return /\d{2}\/\d{2}\/\d{4}\s*[-–]\s*\d{2}:\d{2}/.test(txt);
+        }) || null;
+    }
+
+    const bolaCelula = tr.querySelector(
+        'td[wicketpath*="_cells_4_cell"]'
+    );
 
     const nome = String(
         (nomeCelula && (nomeCelula.innerText || nomeCelula.textContent)) ||
@@ -2430,8 +2544,13 @@ function extrairDadosDaLinhaPaciente(tr){
     }
 
     let classificacao = "NÃO IDENTIFICADA";
-    if(bola){
-        classificacao = classeParaClassificacao(bola);
+
+    // Se bolaCelula já for o elemento da bolinha, a função também o aceita.
+    classificacao = classeParaClassificacao(bolaCelula);
+
+    // Fallback completo na linha.
+    if(classificacao === "NÃO IDENTIFICADA"){
+        classificacao = capturarClassificacaoDaLinha(tr);
     }
 
     if(classificacao === "NÃO IDENTIFICADA" && nome){
@@ -2628,28 +2747,18 @@ function instalarCapturaCliquePaciente(){
             const tr = obterLinhaDoEventoCELK(evento);
             if(!tr) return;
 
-            let alvoNome = null;
-
-            try{
-                if(evento.target && evento.target.closest){
-                    alvoNome = evento.target.closest(
-                        'td[wicketpath*="_cells_5_cell"]'
-                    );
-                }
-            }catch(_){ }
-
-            if(!alvoNome) return;
-
+            // Não exigimos mais que o clique seja exatamente na célula do nome.
+            // O CELK pode colocar o nome, classificação e área clicável em células
+            // diferentes. Basta que o evento pertença à linha do paciente.
             const dados = extrairDadosDaLinhaPaciente(tr);
 
             if(!dados.nome || !pareceNomePaciente(dados.nome)) return;
 
-            try{ capturarClassificacaoDaLinha(tr); }catch(_){ }
-            const classificacaoPrevia = obterClassificacao(dados.nome);
-            if(classificacaoPrevia && classificacaoPrevia !== "NÃO IDENTIFICADA"){
-                dados.classificacao = classificacaoPrevia;
-            }
-            if(evento.type === "pointerdown" || evento.type === "mousedown"){
+            try{
+                capturarClassificacaoDaLinha(tr);
+            }catch(_){ }
+
+            if(evento.type === "mousedown"){
                 registrarEntradaAoClicarPacienteCELK(tr,evento);
                 return;
             }
@@ -3001,6 +3110,8 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         return false;
     }
 
+    // SAÍDA = horário REAL do clique em FINALIZAR/CONCLUIR.
+    // Capturado antes da ação do CELK. Sem +10 minutos.
     const saida = obterHorarioAtualRelatorio();
 
     let chegada = String(dados.chegada || "").trim();
@@ -3736,15 +3847,58 @@ function obterDadosPacienteDeclaracao(){
     // =========================================================
     // HORÁRIO DE CHEGADA
     // =========================================================
+    //
+    // Usa o horário REAL registrado pelo CELK na fila do paciente.
+    // Esse é o valor da célula ..._cells_8_cell, por exemplo:
+    // "19/08/2026 - 07:25 BRT".
+    //
 
     let chegada = "";
 
-    const mTriagem = tela.match(
-        /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
-    );
+    // Primeiro: registro persistido quando o paciente foi clicado
+    // na fila do CELK.
+    try{
+        const pendente = JSON.parse(
+            localStorage.getItem("celk_paciente_pendente") || "null"
+        );
 
-    if(mTriagem){
-        chegada = mTriagem[1];
+        if(
+            pendente &&
+            pendente.nome &&
+            /^\d{1,2}:\d{2}$/.test(
+                String(pendente.chegada || "").trim()
+            )
+        ){
+            chegada = String(pendente.chegada).trim();
+        }
+    }catch(_){ }
+
+    // Segundo: relatório persistido.
+    if(!chegada){
+        try{
+            const lista = obterListaRelatorio();
+            const paciente = lista.find(function(item){
+                return (
+                    normalizarClassificacaoTexto(item.nome) ===
+                    normalizarClassificacaoTexto(nome)
+                ) && item.chegada;
+            });
+
+            if(paciente){
+                chegada = String(paciente.chegada).trim();
+            }
+        }catch(_){ }
+    }
+
+    // Terceiro: fallback pelo texto visível da tela.
+    if(!chegada){
+        const mTriagem = tela.match(
+            /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+        );
+
+        if(mTriagem){
+            chegada = mTriagem[1];
+        }
     }
 
     if(!chegada){
@@ -3763,39 +3917,25 @@ function obterDadosPacienteDeclaracao(){
 
 
     // =========================================================
-    // DATA / HORÁRIOS
+    // DATA / SAÍDA
     // =========================================================
 
     const agora = new Date();
+
     const data = agora.toLocaleDateString("pt-BR",{
         day:"2-digit",
         month:"2-digit",
         year:"numeric"
     });
 
-    // SAÍDA DA DECLARAÇÃO = horário REAL neste instante.
-    // NÃO soma 10 minutos.
-    const saida = obterHorarioAtualRelatorio();
+    // SAÍDA DA DECLARAÇÃO = horário REAL do momento do preenchimento.
+    // Não acrescenta minutos.
+    const saida = agora.toLocaleTimeString("pt-BR",{
+        hour:"2-digit",
+        minute:"2-digit",
+        hourCycle:"h23"
+    });
 
-    // CHEGADA = horário registrado na fila do CELK.
-    try{
-        const listaRelatorio = obterListaRelatorio();
-        const registro = listaRelatorio.find(function(item){
-            return normalizarClassificacaoTexto(item.nome) === normalizarClassificacaoTexto(nome);
-        });
-        if(registro && /^\d{1,2}:\d{2}$/.test(String(registro.chegada || "").trim())){
-            chegada = String(registro.chegada).trim();
-        }
-    }catch(_){ }
-
-    if(!chegada || chegada === "NÃO IDENTIFICADO"){
-        try{
-            const pendente = JSON.parse(localStorage.getItem("celk_paciente_pendente") || "null");
-            if(pendente && normalizarClassificacaoTexto(pendente.nome) === normalizarClassificacaoTexto(nome) && /^\d{1,2}:\d{2}$/.test(String(pendente.chegada || "").trim())){
-                chegada = String(pendente.chegada).trim();
-            }
-        }catch(_){ }
-    }
 
     return {
         nome,
@@ -4510,16 +4650,9 @@ async function prepararDeclaracao(acompanhante){
             }
         }
 
-        // Recalcula a saída NO MOMENTO EXATO em que a declaração
-        // será preenchida: horário atual + 10 minutos.
-        // Isso evita usar um horário calculado antes da abertura
-        // do modelo nativo do CELK.
-        const agoraSaida = new Date();
-        const saidaMais10 = new Date(
-            agoraSaida.getTime() + 10 * 60 * 1000
-        );
-
-        dados.saida = saidaMais10.toLocaleTimeString("pt-BR",{
+        // SAÍDA DA DECLARAÇÃO = horário REAL no momento do
+        // preenchimento final do documento. Sem +10 minutos.
+        dados.saida = new Date().toLocaleTimeString("pt-BR",{
             hour:"2-digit",
             minute:"2-digit",
             hourCycle:"h23"
