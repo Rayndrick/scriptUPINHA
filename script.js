@@ -2185,62 +2185,37 @@ function salvarClassificacaoCache(nome,classificacao){
     }catch(_){ }
 }
 
+function localizarBolaClassificacaoNaLinha(tr){
+    if(!tr) return null;
+    const candidatos = Array.from(tr.querySelectorAll(
+        '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"],.icon32'
+    ));
+    return candidatos.find(function(el){
+        const classes = String(el.className || "").toLowerCase();
+        return /(?:^|\s)ball-(?:red|orange|yellow|green|blue)(?:\s|$)/.test(classes);
+    }) || null;
+}
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
-
-    const bolaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
-    );
-
-    const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"]'
-    );
-
-    const bola = bolaCelula && bolaCelula.querySelector(
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-    );
-
-    if(bola && nomeCelula){
-        const nome = String(
-            nomeCelula.innerText || nomeCelula.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bola);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            return {nome,classificacao};
-        }
-    }
-
-    return null;
+    const bola = localizarBolaClassificacaoNaLinha(tr);
+    const nome = nomeDaLinha(tr);
+    if(!bola || !nome || !pareceNomePaciente(nome)) return null;
+    const classificacao = classeParaClassificacao(bola);
+    if(classificacao === "NÃO IDENTIFICADA") return null;
+    return {nome,classificacao};
 }
-
 function capturarClassificacaoDaLinha(tr){
     if(!tr) return false;
-
-    const bola = tr.querySelector(
-        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,' +
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-    );
-
+    const bola = localizarBolaClassificacaoNaLinha(tr);
     if(!bola) return false;
-
     const classificacao = classeParaClassificacao(bola);
-
     if(classificacao === "NÃO IDENTIFICADA") return false;
-
     const nome = nomeDaLinha(tr);
-
-    if(!nome) return false;
-
+    if(!nome || !pareceNomePaciente(nome)) return false;
     salvarClassificacaoCache(nome,classificacao);
+    console.log("[CELK RELATÓRIO] CLASSIFICAÇÃO CAPTURADA ANTES DA NAVEGAÇÃO:",nome,"=>",classificacao);
     return true;
 }
-
 function sincronizarClassificacoesDaTabela(){
     const linhas = Array.from(
         document.querySelectorAll("table tbody tr, table tr")
@@ -2283,10 +2258,7 @@ function obterClassificacao(nomePaciente){
 
         if(!nomeLinha || nomeLinha !== nome) continue;
 
-        const bola = tr.querySelector(
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        );
-
+        const bola = localizarBolaClassificacaoNaLinha(tr);
         const classificacao = classeParaClassificacao(bola);
 
         if(classificacao !== "NÃO IDENTIFICADA"){
@@ -2430,9 +2402,7 @@ function extrairDadosDaLinhaPaciente(tr){
         'td[wicketpath*="_cells_8_cell"]'
     );
 
-    const bolaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
-    );
+    const bola = localizarBolaClassificacaoNaLinha(tr);
 
     const nome = String(
         (nomeCelula && (nomeCelula.innerText || nomeCelula.textContent)) ||
@@ -2460,11 +2430,6 @@ function extrairDadosDaLinhaPaciente(tr){
     }
 
     let classificacao = "NÃO IDENTIFICADA";
-
-    const bola = bolaCelula && bolaCelula.querySelector(
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-    );
-
     if(bola){
         classificacao = classeParaClassificacao(bola);
     }
@@ -2679,11 +2644,12 @@ function instalarCapturaCliquePaciente(){
 
             if(!dados.nome || !pareceNomePaciente(dados.nome)) return;
 
-            try{
-                capturarClassificacaoDaLinha(tr);
-            }catch(_){ }
-
-            if(evento.type === "mousedown"){
+            try{ capturarClassificacaoDaLinha(tr); }catch(_){ }
+            const classificacaoPrevia = obterClassificacao(dados.nome);
+            if(classificacaoPrevia && classificacaoPrevia !== "NÃO IDENTIFICADA"){
+                dados.classificacao = classificacaoPrevia;
+            }
+            if(evento.type === "pointerdown" || evento.type === "mousedown"){
                 registrarEntradaAoClicarPacienteCELK(tr,evento);
                 return;
             }
@@ -2702,6 +2668,7 @@ function instalarCapturaCliquePaciente(){
         }
     }
 
+    document.addEventListener("pointerdown",processarEvento,true);
     document.addEventListener("mousedown",processarEvento,true);
     document.addEventListener("click",processarEvento,true);
 
@@ -3796,26 +3763,39 @@ function obterDadosPacienteDeclaracao(){
 
 
     // =========================================================
-    // DATA / SAÍDA
+    // DATA / HORÁRIOS
     // =========================================================
 
     const agora = new Date();
-
     const data = agora.toLocaleDateString("pt-BR",{
         day:"2-digit",
         month:"2-digit",
         year:"numeric"
     });
 
-    // Horário de saída = horário atual + 10 minutos
-    const saidaData = new Date(agora.getTime() + 10 * 60 * 1000);
+    // SAÍDA DA DECLARAÇÃO = horário REAL neste instante.
+    // NÃO soma 10 minutos.
+    const saida = obterHorarioAtualRelatorio();
 
-    const saida = saidaData.toLocaleTimeString("pt-BR",{
-        hour:"2-digit",
-        minute:"2-digit",
-        hourCycle:"h23"
-    });
+    // CHEGADA = horário registrado na fila do CELK.
+    try{
+        const listaRelatorio = obterListaRelatorio();
+        const registro = listaRelatorio.find(function(item){
+            return normalizarClassificacaoTexto(item.nome) === normalizarClassificacaoTexto(nome);
+        });
+        if(registro && /^\d{1,2}:\d{2}$/.test(String(registro.chegada || "").trim())){
+            chegada = String(registro.chegada).trim();
+        }
+    }catch(_){ }
 
+    if(!chegada || chegada === "NÃO IDENTIFICADO"){
+        try{
+            const pendente = JSON.parse(localStorage.getItem("celk_paciente_pendente") || "null");
+            if(pendente && normalizarClassificacaoTexto(pendente.nome) === normalizarClassificacaoTexto(nome) && /^\d{1,2}:\d{2}$/.test(String(pendente.chegada || "").trim())){
+                chegada = String(pendente.chegada).trim();
+            }
+        }catch(_){ }
+    }
 
     return {
         nome,
