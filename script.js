@@ -1637,18 +1637,6 @@ function preencherEvolucao(opcoes = {}){
         chegada = mTriagem[2];
     }
 
-    // --------------------------------------------------
-    // REGISTRO DO INÍCIO DO ATENDIMENTO
-    // --------------------------------------------------
-    // O horário "Atendido" deve ser o momento em que o
-    // botão 🩺 Atendimento / Clin / Ped é clicado.
-    registrarInicioAtendimentoRelatorio(
-        nome,
-        idade,
-        chegada,
-        horaAtual
-    );
-
     // ------------------------------
     // TRIAGEM / QUEIXA
     // ------------------------------
@@ -1975,8 +1963,10 @@ ${exameClin}
         '</div>'
     );
 
-    // O horário de "Atendido" já foi registrado acima, no momento
-    // do clique em 🩺 Atendimento / Clin / Ped.
+    // O relatório agora é registrado SOMENTE quando o atendimento for
+    // efetivamente finalizado. Aqui salvamos os dados do paciente para
+    // garantir que nome + classificação já estejam prontos antes da saída.
+    registrarPacienteEmAtendimento(nome, idade, chegada);
 
 }
     //--------------------------------------------------
@@ -2137,59 +2127,39 @@ function salvarClassificacaoCache(nome,classificacao){
         }
     }catch(_){}
 
-    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    console.log("[CELK Helper V41] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // ESTRUTURA CONFIRMADA NOS TESTES DO CELK (12/08/2026):
-    // índice 3 = célula da classificação (icon32 ball-cor)
-    // índice 4 = célula do paciente/nome
-    // Não usar cells_4/cells_5 como regra principal, pois essa numeração
-    // varia conforme a tela/estrutura Wicket.
+    // ESTRUTURA CONFIRMADA PELO DOM DO CELK:
+    // _cells_4_cell = classificação (TD com class="icon32 ball-*" )
+    // _cells_5_cell = nome do paciente.
+    // O ball-* fica no PRÓPRIO TD, portanto usamos matches() também.
     const celulas = Array.from(tr.querySelectorAll("td,th"));
 
     const seletoresBola =
         '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],' +
         '[class~="ball-green"],[class~="ball-blue"]';
 
-    // 1) Estrutura exata confirmada pelo teste do usuário.
-    const bolaCelula = celulas[3] || null;
-    const nomeCelula = celulas[4] || null;
-    const bolaExata = bolaCelula && bolaCelula.querySelector(seletoresBola);
-
-    if(bolaExata && nomeCelula){
-        const nome = String(
-            nomeCelula.innerText || nomeCelula.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bolaExata);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            return {nome, classificacao};
-        }
-    }
-
-    // 2) Fallback por wicketpath, caso o CELK mude a estrutura.
+    // 1) Wicketpath confirmado pelos testes do CELK.
     const bolaCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_3_cell"]'
+        'td[wicketpath*="_cells_4_cell"],th[wicketpath*="_cells_4_cell"]'
     );
     const nomeCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
+        'td[wicketpath*="_cells_5_cell"],th[wicketpath*="_cells_5_cell"]'
     );
 
-    const bolaWicket = bolaCelulaWicket &&
-        bolaCelulaWicket.querySelector(seletoresBola);
+    const bolaWicket = bolaCelulaWicket && (
+        bolaCelulaWicket.matches(seletoresBola)
+            ? bolaCelulaWicket
+            : bolaCelulaWicket.querySelector(seletoresBola)
+    );
 
     if(bolaWicket && nomeCelulaWicket){
         const nome = String(
-            nomeCelulaWicket.innerText ||
-            nomeCelulaWicket.textContent || ""
+            nomeCelulaWicket.innerText || nomeCelulaWicket.textContent || ""
         ).replace(/\s+/g," ").trim();
 
         const classificacao = classeParaClassificacao(bolaWicket);
@@ -2203,8 +2173,40 @@ function nomeClassificacaoPorEstruturaCELK(tr){
         }
     }
 
-    // 3) Fallback genérico: encontra a bolinha e procura a célula de nome.
-    const bola = tr.querySelector(seletoresBola);
+    // 2) Fallback pelo índice confirmado da tabela.
+    const bolaCelula = celulas[3] || null;
+    const nomeCelula = celulas[4] || null;
+
+    const bolaPorIndice = bolaCelula && (
+        bolaCelula.matches(seletoresBola)
+            ? bolaCelula
+            : bolaCelula.querySelector(seletoresBola)
+    );
+
+    if(bolaPorIndice && nomeCelula){
+        const nome = String(
+            nomeCelula.innerText || nomeCelula.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        const classificacao = classeParaClassificacao(bolaPorIndice);
+
+        if(
+            nome &&
+            pareceNomePaciente(nome) &&
+            classificacao !== "NÃO IDENTIFICADA"
+        ){
+            return {nome, classificacao};
+        }
+    }
+
+    // 3) Fallback genérico: procura a própria bolinha e depois o nome.
+    let bola = (tr.matches && tr.matches(seletoresBola)) ? tr : null;
+
+    if(!bola){
+        bola = Array.from(
+            tr.querySelectorAll("td,th,div,span")
+        ).find(el => el.matches && el.matches(seletoresBola)) || null;
+    }
 
     if(!bola) return null;
 
@@ -2213,7 +2215,6 @@ function nomeClassificacaoPorEstruturaCELK(tr){
 
     const indiceBola = celulas.indexOf(bola.closest("td,th"));
 
-    // Normalmente o nome vem imediatamente depois da classificação.
     for(let i = Math.max(0, indiceBola + 1); i < celulas.length; i++){
         const nome = String(
             celulas[i].innerText || celulas[i].textContent || ""
@@ -2224,7 +2225,6 @@ function nomeClassificacaoPorEstruturaCELK(tr){
         }
     }
 
-    // Último fallback: usa o extrator genérico já existente.
     const nome = nomeDaLinha(tr);
     if(nome){
         return {nome, classificacao};
@@ -2262,10 +2262,15 @@ function capturarClassificacaoDaLinha(tr){
         return true;
     }
 
-    const bola=tr.querySelector(
+    const seletorBola =
         '.icon32.ball-red, .icon32.ball-orange, .icon32.ball-yellow, .icon32.ball-green, .icon32.ball-blue, ' +
-        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]'
-    );
+        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]';
+
+    const bola =
+        (tr.matches && tr.matches(seletorBola) ? tr : null) ||
+        Array.from(tr.querySelectorAll("td,th,div,span")).find(el =>
+            el.matches && el.matches(seletorBola)
+        ) || null;
 
     if(!bola) return false;
 
@@ -2285,9 +2290,13 @@ function extrairMapaClassificacoesDaTabela(){
     const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
 
     for(const tr of linhas){
-        const bola=tr.querySelector(
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        );
+        const seletorBola =
+            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]';
+        const bola =
+            (tr.matches && tr.matches(seletorBola) ? tr : null) ||
+            Array.from(tr.querySelectorAll("td,th,div,span")).find(el =>
+                el.matches && el.matches(seletorBola)
+            ) || null;
         if(!bola) continue;
 
         const classificacao=classeParaClassificacao(bola);
@@ -2430,12 +2439,12 @@ function obterClassificacao(nomePaciente){
 }
 
 // --------------------------------------------------
-// RELATÓRIO DO PLANTÃO — V39
-// PRÉ-REGISTRO + CLASSIFICAÇÃO + INÍCIO DO ATENDIMENTO + FINALIZAÇÃO
+// RELATÓRIO DO PLANTÃO — V41
+// PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
 // --------------------------------------------------
 // A lógica abaixo mantém o paciente no relatório assim que ele é
-// identificado/aberto e preenche "Atendido" no momento em que
-// o botão de atendimento é clicado.
+// identificado/aberto, mas só preenche "Atendido" e "Tempo" quando
+// o atendimento é efetivamente finalizado.
 //
 // Isso permite que o relatório mostre:
 // ✓ pacientes já atendidos
@@ -2522,7 +2531,7 @@ function atualizarClassificacaoNoRelatorio(nome,classificacao){
     });
     if(alterou){
         salvarListaRelatorio(lista);
-        console.log("[CELK RELATÓRIO V39] CLASSIFICAÇÃO ATUALIZADA:",nome,"=>",classificacao);
+        console.log("[CELK RELATÓRIO V41] CLASSIFICAÇÃO ATUALIZADA:",nome,"=>",classificacao);
     }
 }
 
@@ -2621,7 +2630,7 @@ function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V39] PACIENTE PRÉ-REGISTRADO:",
+        "[CELK RELATÓRIO V41] PACIENTE PRÉ-REGISTRADO:",
         paciente.nome,
         "=>",
         paciente.classificacao
@@ -2670,7 +2679,7 @@ function salvarPacientePendente(
     );
 
     console.log(
-        "[CELK RELATÓRIO V39] PRÉ-REGISTRO:",
+        "[CELK RELATÓRIO V41] PRÉ-REGISTRO:",
         dados.nome,
         "=>",
         dados.classificacao
@@ -2761,101 +2770,12 @@ function dadosPacienteAtual(){
     };
 }
 
-function registrarInicioAtendimentoRelatorio(
-    nome,
-    idade,
-    chegada,
-    horaAtendido
-){
-    nome = String(nome || "").trim();
-
-    if(!nome || nome === "Não encontrado"){
-        return false;
-    }
-
-    const lista = obterListaRelatorio();
-
-    let classificacao = obterClassificacaoDoCache(nome);
-
-    if(classificacao === "NÃO IDENTIFICADA"){
-        try{
-            classificacao = obterClassificacao(nome);
-        }catch(_){}
-    }
-
-    let paciente = localizarPacienteNoRelatorio(
-        lista,
-        nome,
-        chegada
-    );
-
-    if(!paciente){
-        paciente = {
-            numero: lista.length + 1,
-            nome: nome,
-            idade: String(idade || "").trim(),
-            classificacao: classificacao || "NÃO IDENTIFICADA",
-            chegada: String(chegada || "").trim(),
-            atendido: String(horaAtendido || "").trim(),
-            tempo: ""
-        };
-
-        paciente.tempo = calcularTempoRelatorio(
-            paciente.chegada,
-            new Date()
-        );
-
-        lista.push(paciente);
-    }else{
-        paciente.nome = nome;
-
-        if(idade){
-            paciente.idade = String(idade).trim();
-        }
-
-        if(chegada){
-            paciente.chegada = String(chegada).trim();
-        }
-
-        if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            paciente.classificacao = classificacao;
-        }
-
-        // Só grava se ainda não houver horário.
-        // Assim um clique repetido não altera o horário original.
-        if(!paciente.atendido){
-            paciente.atendido = String(horaAtendido || "").trim();
-
-            paciente.tempo = calcularTempoRelatorio(
-                paciente.chegada,
-                new Date()
-            );
-        }
-    }
-
-    salvarListaRelatorio(lista);
-
-    console.log(
-        "[CELK RELATÓRIO V39] ATENDIMENTO INICIADO:",
-        paciente.nome,
-        "=>",
-        paciente.atendido,
-        "| espera:",
-        paciente.tempo
-    );
-
-    return true;
-}
-
 function registrarFinalizacaoRelatorio(){
     const dados = dadosPacienteAtual();
 
     if(!dados || !dados.nome){
         console.warn(
-            "[CELK RELATÓRIO V39] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
+            "[CELK RELATÓRIO V41] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
         return false;
     }
@@ -2923,25 +2843,18 @@ function registrarFinalizacaoRelatorio(){
             paciente.classificacao = classificacao;
         }
 
-        // "Atendido" é o horário do clique em 🩺 Atendimento.
-        // A finalização não deve sobrescrever esse horário.
-        if(!paciente.atendido){
-            paciente.atendido = atendido;
-        }
+        paciente.atendido = atendido;
 
-        // O tempo de espera é calculado no início do atendimento.
-        if(!paciente.tempo){
-            paciente.tempo = calcularTempoRelatorio(
-                paciente.chegada,
-                agora
-            );
-        }
+        paciente.tempo = calcularTempoRelatorio(
+            paciente.chegada,
+            agora
+        );
     }
 
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V39] FINALIZAÇÃO REGISTRADA:",
+        "[CELK RELATÓRIO V41] FINALIZAÇÃO REGISTRADA:",
         paciente.nome,
         "=>",
         paciente.classificacao,
@@ -3032,7 +2945,7 @@ function instalarCapturaFinalizacaoRelatorio(){
         }catch(err){
 
             console.error(
-                "[CELK RELATÓRIO V39] ERRO NA CAPTURA DA FINALIZAÇÃO:",
+                "[CELK RELATÓRIO V41] ERRO NA CAPTURA DA FINALIZAÇÃO:",
                 err
             );
 
@@ -3053,7 +2966,7 @@ function instalarCapturaFinalizacaoRelatorio(){
     );
 
     console.log(
-        "[CELK RELATÓRIO V39] CAPTURA DE FINALIZAÇÃO INSTALADA."
+        "[CELK RELATÓRIO V41] CAPTURA DE FINALIZAÇÃO INSTALADA."
     );
 }
 
@@ -6258,7 +6171,7 @@ document
     aba.document.close();
 
     console.log(
-        "[CELK RELATÓRIO V39] RELATÓRIO ABERTO:",
+        "[CELK RELATÓRIO V41] RELATÓRIO ABERTO:",
         pacientes.length,
         "pacientes"
     );
