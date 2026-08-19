@@ -2031,7 +2031,7 @@ function iniciarAtualizacao(){
 // MANTÉM A ESTRUTURA ORIGINAL DO RELATÓRIO E ACRESCENTA:
 //   CHEGADA        = horário da chegada na fila do CELK
 //   ATENDIDO       = momento em que o Helper inicia o atendimento
-//   TEMPO          = ATENDIDO - CHEGADA
+//   TEMPO          = cálculo interno (não exibido no relatório)
 //   SAÍDA          = momento em que o atendimento é finalizado
 //   T. ATENDIMENTO = SAÍDA - ATENDIDO
 //   T. TOTAL       = SAÍDA - CHEGADA
@@ -2061,46 +2061,26 @@ function normalizarClassificacaoTexto(valor){
 function classeParaClassificacao(elemento){
     if(!elemento) return "NÃO IDENTIFICADA";
 
-    // O CELK usa elementos como:
-    // <div class="icon32 ball-orange">[cell]</div>
-    // A classificação pode estar no próprio elemento ou em um descendente.
-    const elementos = [elemento];
+    const classes = String(elemento.className || "").toLowerCase();
 
-    try{
-        elementos.push(...elemento.querySelectorAll(
-            '[class*="ball-red"],[class*="ball-orange"],[class*="ball-yellow"],[class*="ball-green"],[class*="ball-blue"]'
-        ));
-    }catch(_){ }
+    if(/(?:^|\s)ball-red(?:\s|$)/.test(classes)) return "VERMELHO";
+    if(/(?:^|\s)ball-orange(?:\s|$)/.test(classes)) return "LARANJA";
+    if(/(?:^|\s)ball-yellow(?:\s|$)/.test(classes)) return "AMARELO";
+    if(/(?:^|\s)ball-green(?:\s|$)/.test(classes)) return "VERDE";
+    if(/(?:^|\s)ball-blue(?:\s|$)/.test(classes)) return "AZUL";
 
-    for(const el of elementos){
-        const classes = String(
-            el.className ||
-            (el.getAttribute && el.getAttribute("class")) ||
-            ""
-        ).toLowerCase();
+    const conteudo = normalizarClassificacaoTexto(
+        elemento.textContent ||
+        elemento.getAttribute("title") ||
+        elemento.getAttribute("aria-label") ||
+        elemento.getAttribute("data-title") || ""
+    );
 
-        if(/(?:^|\s)ball-red(?:\s|$)/.test(classes)) return "VERMELHO";
-        if(/(?:^|\s)ball-orange(?:\s|$)/.test(classes)) return "LARANJA";
-        if(/(?:^|\s)ball-yellow(?:\s|$)/.test(classes)) return "AMARELO";
-        if(/(?:^|\s)ball-green(?:\s|$)/.test(classes)) return "VERDE";
-        if(/(?:^|\s)ball-blue(?:\s|$)/.test(classes)) return "AZUL";
-    }
-
-    // Fallback: tenta o texto/atributos do próprio elemento.
-    for(const el of elementos){
-        const conteudo = normalizarClassificacaoTexto(
-            (el.textContent || "") + " " +
-            (el.getAttribute ? (el.getAttribute("title") || "") : "") + " " +
-            (el.getAttribute ? (el.getAttribute("aria-label") || "") : "") + " " +
-            (el.getAttribute ? (el.getAttribute("data-title") || "") : "")
-        );
-
-        if(/\bVERMELHO\b|\bRED\b/.test(conteudo)) return "VERMELHO";
-        if(/\bLARANJA\b|\bORANGE\b/.test(conteudo)) return "LARANJA";
-        if(/\bAMARELO\b|\bYELLOW\b/.test(conteudo)) return "AMARELO";
-        if(/\bVERDE\b|\bGREEN\b/.test(conteudo)) return "VERDE";
-        if(/\bAZUL\b|\bBLUE\b/.test(conteudo)) return "AZUL";
-    }
+    if(/VERMELHO|RED/.test(conteudo)) return "VERMELHO";
+    if(/LARANJA|ORANGE/.test(conteudo)) return "LARANJA";
+    if(/AMARELO|YELLOW/.test(conteudo)) return "AMARELO";
+    if(/VERDE|GREEN/.test(conteudo)) return "VERDE";
+    if(/AZUL|BLUE/.test(conteudo)) return "AZUL";
 
     return "NÃO IDENTIFICADA";
 }
@@ -2208,12 +2188,9 @@ function salvarClassificacaoCache(nome,classificacao){
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // A classificação do CELK foi observada no elemento da própria célula,
-    // por exemplo: div.wicketpath="..._cells_5_cell" class="icon32 ball-orange".
-    const bolaCelula =
-        tr.querySelector('[wicketpath*="_cells_5_cell"][class*="ball-"]') ||
-        tr.querySelector('[wicketpath*="_cells_4_cell"][class*="ball-"]') ||
-        tr;
+    const bolaCelula = tr.querySelector(
+        'td[wicketpath*="_cells_4_cell"]'
+    );
 
     const nomeCelula = tr.querySelector(
         'td[wicketpath*="_cells_5_cell"]'
@@ -2243,73 +2220,25 @@ function nomeClassificacaoPorEstruturaCELK(tr){
 }
 
 function capturarClassificacaoDaLinha(tr){
-    if(!tr) return "NÃO IDENTIFICADA";
+    if(!tr) return false;
 
-    // PRIMEIRA TENTATIVA: exatamente a estrutura mostrada no CELK.
-    // Ex.: <div wicketpath="..._cells_5_cell" class="icon32 ball-orange">
-    const seletoresClassificacao = [
-        '[wicketpath*="_cells_5_cell"][class*="ball-"]',
-        '[wicketpath*="_cells_4_cell"][class*="ball-"]',
-        '.icon32.ball-red',
-        '.icon32.ball-orange',
-        '.icon32.ball-yellow',
-        '.icon32.ball-green',
-        '.icon32.ball-blue',
-        '[class~="ball-red"]',
-        '[class~="ball-orange"]',
-        '[class~="ball-yellow"]',
-        '[class~="ball-green"]',
-        '[class~="ball-blue"]'
-    ];
+    const bola = tr.querySelector(
+        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,' +
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+    );
 
-    for(const seletor of seletoresClassificacao){
-        try{
-            const elemento = tr.querySelector(seletor);
-            if(!elemento) continue;
+    if(!bola) return false;
 
-            const classificacao = classeParaClassificacao(elemento);
+    const classificacao = classeParaClassificacao(bola);
 
-            if(classificacao !== "NÃO IDENTIFICADA"){
-                const nome = nomeDaLinha(tr);
+    if(classificacao === "NÃO IDENTIFICADA") return false;
 
-                if(nome){
-                    salvarClassificacaoCache(nome,classificacao);
+    const nome = nomeDaLinha(tr);
 
-                    console.log(
-                        "[CELK RELATÓRIO] CLASSIFICAÇÃO CAPTURADA:",
-                        nome,
-                        "=>",
-                        classificacao,
-                        "| ELEMENTO:",
-                        elemento
-                    );
-                }
+    if(!nome) return false;
 
-                return classificacao;
-            }
-        }catch(_){ }
-    }
-
-    // Último fallback: procura qualquer elemento da linha que tenha ball-*.
-    try{
-        const todos = tr.querySelectorAll('[class*="ball-"]');
-
-        for(const elemento of todos){
-            const classificacao = classeParaClassificacao(elemento);
-
-            if(classificacao !== "NÃO IDENTIFICADA"){
-                const nome = nomeDaLinha(tr);
-
-                if(nome){
-                    salvarClassificacaoCache(nome,classificacao);
-                }
-
-                return classificacao;
-            }
-        }
-    }catch(_){ }
-
-    return "NÃO IDENTIFICADA";
+    salvarClassificacaoCache(nome,classificacao);
+    return true;
 }
 
 function sincronizarClassificacoesDaTabela(){
@@ -2545,12 +2474,12 @@ function extrairDadosDaLinhaPaciente(tr){
 
     let classificacao = "NÃO IDENTIFICADA";
 
-    // Se bolaCelula já for o elemento da bolinha, a função também o aceita.
-    classificacao = classeParaClassificacao(bolaCelula);
+    const bola = bolaCelula && bolaCelula.querySelector(
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+    );
 
-    // Fallback completo na linha.
-    if(classificacao === "NÃO IDENTIFICADA"){
-        classificacao = capturarClassificacaoDaLinha(tr);
+    if(bola){
+        classificacao = classeParaClassificacao(bola);
     }
 
     if(classificacao === "NÃO IDENTIFICADA" && nome){
@@ -2747,9 +2676,18 @@ function instalarCapturaCliquePaciente(){
             const tr = obterLinhaDoEventoCELK(evento);
             if(!tr) return;
 
-            // Não exigimos mais que o clique seja exatamente na célula do nome.
-            // O CELK pode colocar o nome, classificação e área clicável em células
-            // diferentes. Basta que o evento pertença à linha do paciente.
+            let alvoNome = null;
+
+            try{
+                if(evento.target && evento.target.closest){
+                    alvoNome = evento.target.closest(
+                        'td[wicketpath*="_cells_5_cell"]'
+                    );
+                }
+            }catch(_){ }
+
+            if(!alvoNome) return;
+
             const dados = extrairDadosDaLinhaPaciente(tr);
 
             if(!dados.nome || !pareceNomePaciente(dados.nome)) return;
@@ -2777,7 +2715,6 @@ function instalarCapturaCliquePaciente(){
         }
     }
 
-    document.addEventListener("pointerdown",processarEvento,true);
     document.addEventListener("mousedown",processarEvento,true);
     document.addEventListener("click",processarEvento,true);
 
@@ -3193,20 +3130,23 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         paciente.saida = saida;
     }
 
-    paciente.tempo = calcularTempoEntreHorarios(
-        paciente.chegada,
-        paciente.atendido
-    );
+    // TEMPO não é mais exibido no relatório.
+    // Os dois tempos exibidos são:
+    // T. Atendimento = SAÍDA - ATENDIDO
+    // T. Total       = SAÍDA - CHEGADA
+    paciente.tempo = "";
 
-    paciente.tempoAtendimento = calcularTempoAtendimentoRelatorio(
-        paciente.atendido,
-        paciente.saida
-    );
+    paciente.tempoAtendimento =
+        calcularTempoAtendimentoRelatorio(
+            paciente.atendido,
+            paciente.saida
+        );
 
-    paciente.tempoTotal = calcularTempoTotalRelatorio(
-        paciente.chegada,
-        paciente.saida
-    );
+    paciente.tempoTotal =
+        calcularTempoTotalRelatorio(
+            paciente.chegada,
+            paciente.saida
+        );
 
     salvarListaRelatorio(lista);
 
@@ -3329,12 +3269,12 @@ function instalarCapturaFinalizacaoRelatorio(){
         }
     }
 
-    document.addEventListener("pointerdown",capturarFinalizacao,true);
-    document.addEventListener("mousedown",capturarFinalizacao,true);
-    document.addEventListener("click",capturarFinalizacao,true);
-
+    // A saída NÃO é registrada no pointerdown/mousedown/click.
+    // O CELK pode disparar esses eventos antes de concluir o atendimento.
+    // A saída é registrada pelo monitor de sucesso abaixo, no momento em
+    // que aparece "ATENDIMENTO FINALIZADO COM SUCESSO".
     console.log(
-        "[CELK RELATÓRIO] CAPTURA DE SAÍDA INSTALADA."
+        "[CELK RELATÓRIO] CAPTURA DE SAÍDA ARMADA — aguardando confirmação real do CELK."
     );
 }
 
@@ -3507,7 +3447,6 @@ td.horario,td.tempo{white-space:nowrap}
 <th>Classificação</th>
 <th>Chegada</th>
 <th>Atendido</th>
-<th>Tempo</th>
 <th>Saída</th>
 <th>T. Atendimento</th>
 <th>T. Total</th>
@@ -3525,13 +3464,12 @@ ${lista.length ? lista.map(function(paciente){
 <td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
-<td class="tempo">${escaparHtmlRelatorio(paciente.tempo)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
 </tr>`;
 }).join("") : `
-<tr><td colspan="10">NENHUM PACIENTE REGISTRADO.</td></tr>
+<tr><td colspan="9">NENHUM PACIENTE REGISTRADO.</td></tr>
 `}
 </tbody>
 </table>
@@ -3571,12 +3509,11 @@ window.addEventListener("message",function(evento){
             "<td class=\"classificacao\" style=\"background:"+cor+"\">"+esc(c)+"</td>"+
             "<td>"+esc(paciente.chegada)+"</td>"+
             "<td>"+esc(paciente.atendido)+"</td>"+
-            "<td>"+esc(paciente.tempo)+"</td>"+
             "<td>"+esc(paciente.saida)+"</td>"+
             "<td>"+esc(paciente.tempoAtendimento)+"</td>"+
             "<td>"+esc(paciente.tempoTotal)+"</td>"+
             "</tr>";
-    }).join("") : "<tr><td colspan=\"10\">NENHUM PACIENTE REGISTRADO.</td></tr>";
+    }).join("") : "<tr><td colspan=\"9\">NENHUM PACIENTE REGISTRADO.</td></tr>";
 });
 </script>
 </body>
