@@ -2105,7 +2105,7 @@ function nomeDaLinha(tr){
     if(!tr) return "";
 
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_6_cell"]'
+        '[wicketpath*="_cells_6_cell"]'
     );
 
     if(nomeCelula){
@@ -2189,11 +2189,11 @@ function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
     const bolaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_5_cell"]'
+        '[wicketpath*="_cells_5_cell"]'
     );
 
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_6_cell"]'
+        '[wicketpath*="_cells_6_cell"]'
     );
 
     const bola = bolaCelula && bolaCelula.querySelector(
@@ -2424,17 +2424,17 @@ function extrairDadosDaLinhaPaciente(tr){
     // cells_7 = idade
     // cells_8 = chegada
     const nomeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_6_cell"]'
+        '[wicketpath*="_cells_6_cell"]'
     );
 
     const idadeCelula = tr.querySelector(
-        'td[wicketpath*="_cells_7_cell"]'
+        '[wicketpath*="_cells_7_cell"]'
     );
 
     // CHEGADA = horário registrado pelo próprio CELK na fila.
     // Ex.: "19/08/2026 - 07:25 BRT"
     let chegadaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_8_cell"]'
+        '[wicketpath*="_cells_8_cell"]'
     );
 
     // Fallback caso o Wicket altere a estrutura da linha.
@@ -2449,7 +2449,7 @@ function extrairDadosDaLinhaPaciente(tr){
     }
 
     const bolaCelula = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
+        '[wicketpath*="_cells_5_cell"]'
     );
 
     const nome = String(
@@ -2681,18 +2681,9 @@ function instalarCapturaCliquePaciente(){
             const tr = obterLinhaDoEventoCELK(evento);
             if(!tr) return;
 
-            let alvoNome = null;
-
-            try{
-                if(evento.target && evento.target.closest){
-                    alvoNome = evento.target.closest(
-                        'td[wicketpath*="_cells_5_cell"]'
-                    );
-                }
-            }catch(_){ }
-
-            if(!alvoNome) return;
-
+            // O clique pode acontecer no nome, na bola de classificação
+            // ou em qualquer outra célula da mesma linha.
+            // Não restringimos o evento a uma célula específica.
             const dados = extrairDadosDaLinhaPaciente(tr);
 
             if(!dados.nome || !pareceNomePaciente(dados.nome)) return;
@@ -3337,7 +3328,18 @@ function instalarMonitorSucessoFinalizacao(){
 
             ultimaMensagem = agoraMs;
 
-            let dados = dadosPacienteAtual();
+            // Primeiro usa o paciente pendente salvo no momento em que
+            // a fila foi clicada. Ele sobrevive à troca de página do CELK.
+            let dados = null;
+            try{
+                dados = JSON.parse(
+                    localStorage.getItem("celk_paciente_pendente") || "null"
+                );
+            }catch(_){ dados = null; }
+
+            if(!dados || !dados.nome){
+                dados = dadosPacienteAtual();
+            }
 
             if(!dados || !dados.nome){
                 dados = localizarPendenteAnterior(agoraMs);
@@ -3564,7 +3566,6 @@ ${lista.length ? lista.map(function(paciente){
 <td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.atendido)}</td>
-<td class="tempo">${escaparHtmlRelatorio(paciente.tempo)}</td>
 <td class="horario">${escaparHtmlRelatorio(paciente.saida)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoAtendimento)}</td>
 <td class="tempo">${escaparHtmlRelatorio(paciente.tempoTotal)}</td>
