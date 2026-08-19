@@ -2173,9 +2173,14 @@ function nomeClassificacaoPorEstruturaCELK(tr){
         }
     }
 
-    // 2) Fallback pelo índice confirmado da tabela.
-    const bolaCelula = celulas[3] || null;
-    const nomeCelula = celulas[4] || null;
+    // 2) Estrutura confirmada do CELK:
+    // cells_4 = classificação | cells_5 = paciente.
+    const bolaCelula =
+        tr.querySelector('td[wicketpath*="_cells_4_cell"]') ||
+        celulas[3] || null;
+    const nomeCelula =
+        tr.querySelector('td[wicketpath*="_cells_5_cell"]') ||
+        celulas[4] || null;
 
     const bolaPorIndice = bolaCelula && (
         bolaCelula.matches(seletoresBola)
@@ -2349,7 +2354,21 @@ function instalarCapturaAntecipadaClassificacao(){
                 const exata=nomeClassificacaoPorEstruturaCELK(alvo);
                 if(exata){
                     salvarClassificacaoCache(exata.nome,exata.classificacao);
-                    salvarPacientePendente(exata.nome,"","",exata.classificacao);
+
+                    const chegadaCelula = alvo.querySelector(
+                        'td[wicketpath*="_cells_8_cell"]'
+                    );
+                    const chegada = chegadaCelula
+                        ? (String(chegadaCelula.innerText || chegadaCelula.textContent || "")
+                            .match(/\d{2}:\d{2}/) || [""])[0]
+                        : "";
+
+                    salvarPacientePendente(
+                        exata.nome,"",chegada,exata.classificacao
+                    );
+                    preRegistrarNoRelatorio(
+                        exata.nome,"",chegada,exata.classificacao
+                    );
                 }else{
                     const bola=alvo.querySelector(
                         '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
@@ -2359,7 +2378,15 @@ function instalarCapturaAntecipadaClassificacao(){
                     const classificacao=classeParaClassificacao(bola);
                     if(nome && classificacao!=="NÃO IDENTIFICADA"){
                         salvarClassificacaoCache(nome,classificacao);
-                        salvarPacientePendente(nome,"","",classificacao);
+                        const chegadaCelula = alvo.querySelector(
+                            'td[wicketpath*="_cells_8_cell"]'
+                        );
+                        const chegada = chegadaCelula
+                            ? (String(chegadaCelula.innerText || chegadaCelula.textContent || "")
+                                .match(/\d{2}:\d{2}/) || [""])[0]
+                            : "";
+                        salvarPacientePendente(nome,"",chegada,classificacao);
+                        preRegistrarNoRelatorio(nome,"",chegada,classificacao);
                     }
                 }
                 const tabela=alvo.closest("table");
@@ -6056,7 +6083,6 @@ tr.pendente td{
     <th>Idade</th>
     <th>Classificação</th>
     <th>Chegada</th>
-    <th>Atendido</th>
 </tr>
 
 </thead>
@@ -6068,7 +6094,7 @@ tr.pendente td{
 
         html += `
 <tr>
-    <td colspan="6">
+    <td colspan="5">
         NENHUM PACIENTE REGISTRADO.
     </td>
 </tr>
@@ -6123,12 +6149,6 @@ tr.pendente td{
     <td>
         ${escaparHtmlRelatorio(
             paciente.chegada
-        )}
-    </td>
-
-    <td>
-        ${escaparHtmlRelatorio(
-            paciente.atendido
         )}
     </td>
 
