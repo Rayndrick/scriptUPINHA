@@ -1,8 +1,8 @@
 // =========================================================
-// CELK HELPER — V32
+// CELK HELPER — V47
 // ATESTADO: fluxo direto pelo botão "Novo Documento"
 // =========================================================
-console.log("[CELK Helper V32] CARREGADO — ATESTADO COM PREENCHIMENTO DOS DIAS NO EDITOR");
+console.log("[CELK Helper V47] CARREGADO — RELATÓRIO CORRIGIDO");
 
 (function () {
 
@@ -51,28 +51,48 @@ window.celk.init = function(){
 
     criarInterface();
 
-    // Captura a pulseira ANTES de o CELK retirar a linha da tabela.
-    instalarCapturaAntecipadaClassificacao();
+    // --------------------------------------------------
+    // RELATÓRIO — INICIALIZAÇÃO COMPLETA
+    // --------------------------------------------------
 
-    // Alimenta o cache quando estivermos na Consulta de Atendimentos.
-    try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+    // 1. Registra o paciente no momento do clique no nome.
+    // 2. Captura a classificação antes da navegação.
+    // 3. Captura a finalização.
+    // 4. Usa o monitor AJAX como fallback.
+    try{
+        instalarCapturaCliquePaciente();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR CAPTURA DE ENTRADA:",err);
+    }
 
-    // Captura o clique de finalização ANTES do CELK navegar/remover a tela.
-    instalarCapturaFinalizacaoRelatorio();
+    try{
+        instalarCapturaFinalizacaoRelatorio();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR FINALIZAÇÃO:",err);
+    }
+
+    try{
+        instalarMonitorSucessoFinalizacao();
+    }catch(err){
+        console.error("[CELK RELATÓRIO] ERRO AO INSTALAR MONITOR DE SUCESSO:",err);
+    }
+
+    try{
+        sincronizarClassificacoesDaTabela();
+    }catch(_){}
 
     if(window.celk.intervalo) return;
 
     window.celk.intervalo = setInterval(function(){
 
         if(!document.getElementById("celk-helper")){
-
-            console.log("Barra recriada.");
-
+            console.log("[CELK] Barra recriada.");
             criarInterface();
-
         }
 
-        try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
+        try{
+            sincronizarClassificacoesDaTabela();
+        }catch(_){}
 
     },1000);
 
@@ -143,6 +163,14 @@ user-select:none;
 `;
 
 atendimento.onclick = function(){
+    // Garante que, ao clicar em ATENDIMENTO, o relatório já tenha
+    // nome + idade + classificação + chegada.
+    try{
+        registrarEntradaNoRelatorioAoAtender();
+    }catch(err){
+        console.warn("[CELK RELATÓRIO] FALHA AO REGISTRAR AO CLICAR EM ATENDIMENTO:",err);
+    }
+
     preencherEvolucao({modo:"atendimento", qChar:0, eChar:1});
 };
 
@@ -1962,12 +1990,6 @@ ${exameClin}
         textoHtml +
         '</div>'
     );
-
-    // O relatório agora é registrado SOMENTE quando o atendimento for
-    // efetivamente finalizado. Aqui salvamos os dados do paciente para
-    // garantir que nome + classificação já estejam prontos antes da saída.
-    registrarPacienteEmAtendimento(nome, idade, chegada);
-
 }
     //--------------------------------------------------
 // ATUALIZAÇÃO AUTOMÁTICA
@@ -2011,9 +2033,28 @@ function iniciarAtualizacao(){
 // ADICIONAR AO RELATÓRIO
 //--------------------------------------------------
 
-// --------------------------------------------------
-// CLASSIFICAÇÃO DE RISCO — CAPTURA ROBUSTA DO CELK
-// --------------------------------------------------
+// =========================================================
+// RELATÓRIO DO PLANTÃO — FLUXO ROBUSTO
+//
+// MANTÉM A ESTRUTURA ORIGINAL DO RELATÓRIO E ACRESCENTA:
+//   CHEGADA        = horário da chegada na fila do CELK
+//   ATENDIDO       = momento em que o Helper inicia o atendimento
+//   TEMPO          = ATENDIDO - CHEGADA
+//   SAÍDA          = momento em que o atendimento é finalizado
+//   T. ATENDIMENTO = SAÍDA - ATENDIDO
+//   T. TOTAL       = SAÍDA - CHEGADA
+// =========================================================
+
+function normalizarCelk(valor){
+    return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/[^A-Z0-9\s]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase();
+}
 
 function normalizarClassificacaoTexto(valor){
     return String(valor || "")
@@ -2054,403 +2095,180 @@ function classeParaClassificacao(elemento){
 
 function pareceNomePaciente(texto){
     const t = normalizarClassificacaoTexto(texto);
+
     if(!t || t.length < 5 || /\d/.test(t)) return false;
 
-    if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO|TIPO DE ATENDIMENTO|PESQUISAR|PROCURAR)$/.test(t)) return false;
-    if(/UP1|ATENDIMENTO|PEDIATR|MEDICA[CÇ][AÃ]O|COLETA|EMERGENCIA|EMERGÊNCIA|IDOSOS|URG[ÊE]NCIA/.test(t)) return false;
+    if(/^(PACIENTE|PRIORIDADE|PROCEDIMENTO|CLASSIFICACAO|CLASSIFICAÇÃO|CR|LEITO|TEMPO|CHEGADA|ATENDIDO|SITUACAO|SITUAÇÃO|TIPO DE ATENDIMENTO|PESQUISAR|PROCURAR)$/.test(t)){
+        return false;
+    }
 
-    const palavras=t.split(/\s+/).filter(Boolean);
-    return palavras.length >= 2;
+    if(/UP1|ATENDIMENTO|PEDIATR|MEDICACAO|MEDICAÇÃO|COLETA|EMERGENCIA|EMERGÊNCIA|IDOSOS|URGENCIA|URGÊNCIA/.test(t)){
+        return false;
+    }
+
+    return t.split(/\s+/).filter(Boolean).length >= 2;
 }
 
 function nomeDaLinha(tr){
     if(!tr) return "";
 
-    const celulas=Array.from(tr.querySelectorAll("td,th"));
+    const nomeCelula = tr.querySelector(
+        'td[wicketpath*="_cells_6_cell"]'
+    );
 
-    // Prioridade: célula de nome do CELK normalmente é text-left.
-    const ordenadas=celulas.slice().sort((a,b)=>{
-        const sa=(/text-left/i.test(String(a.className||""))?100:0)
-                +(/cells_[23]_cell/i.test(String(a.getAttribute("wicketpath")||""))?30:0);
-        const sb=(/text-left/i.test(String(b.className||""))?100:0)
-                +(/cells_[23]_cell/i.test(String(b.getAttribute("wicketpath")||""))?30:0);
-        return sb-sa;
-    });
+    if(nomeCelula){
+        const nome = String(
+            nomeCelula.innerText || nomeCelula.textContent || ""
+        ).replace(/\s+/g," ").trim();
 
-    for(const td of ordenadas){
-        const texto=String(td.textContent||"").trim();
-        if(pareceNomePaciente(texto)) return texto;
+        if(nome) return nome;
     }
 
-    // Fallback: procura um bloco com várias palavras, excluindo textos do sistema.
+    const celulas = Array.from(tr.querySelectorAll("td,th"));
+
     for(const td of celulas){
-        const partes=String(td.innerText||td.textContent||"")
-            .split(/\n+/).map(x=>x.trim()).filter(Boolean);
-        for(const parte of partes){
-            if(pareceNomePaciente(parte)) return parte;
-        }
+        const texto = String(td.innerText || td.textContent || "")
+            .replace(/\s+/g," ")
+            .trim();
+
+        if(pareceNomePaciente(texto)) return texto;
     }
 
     return "";
 }
 
-function encontrarLinhaDaBola(bola){
-    if(!bola) return null;
+function obterLinhaDoEventoCELK(evento){
+    if(!evento) return null;
 
-    const tr=bola.closest("tr");
-    if(tr) return tr;
+    try{
+        const alvo = evento.target;
 
-    let el=bola;
-    for(let i=0;i<8 && el;i++,el=el.parentElement){
-        if(el.querySelectorAll && el.querySelectorAll("td").length>=3){
-            return el;
+        if(alvo && alvo.closest){
+            const tr = alvo.closest("tr");
+            if(tr) return tr;
         }
-    }
+
+        if(typeof evento.composedPath === "function"){
+            for(const item of evento.composedPath()){
+                if(item && item.tagName === "TR") return item;
+                if(item && item.closest){
+                    const tr = item.closest("tr");
+                    if(tr) return tr;
+                }
+            }
+        }
+    }catch(_){ }
 
     return null;
 }
 
 function salvarClassificacaoCache(nome,classificacao){
-    nome=normalizarClassificacaoTexto(nome);
-    if(!nome || classificacao==="NÃO IDENTIFICADA") return;
+    nome = normalizarClassificacaoTexto(nome);
 
-    let cache={};
-    try{ cache=JSON.parse(localStorage.getItem("celk_classificacoes_cache")||"{}"); }
-    catch(_){ cache={}; }
+    if(!nome || !classificacao || classificacao === "NÃO IDENTIFICADA"){
+        return;
+    }
 
-    cache[nome]=classificacao;
-    localStorage.setItem("celk_classificacoes_cache",JSON.stringify(cache));
+    let cache = {};
 
     try{
-        if(typeof atualizarClassificacaoNoRelatorio === "function"){
-            atualizarClassificacaoNoRelatorio(nome,classificacao);
-        }
-    }catch(_){}
+        cache = JSON.parse(
+            localStorage.getItem("celk_classificacoes_cache") || "{}"
+        );
+    }catch(_){
+        cache = {};
+    }
 
-    console.log("[CELK Helper V32] CLASSIFICAÇÃO CAPTURADA:",nome,"=>",classificacao);
+    cache[nome] = classificacao;
+
+    try{
+        localStorage.setItem(
+            "celk_classificacoes_cache",
+            JSON.stringify(cache)
+        );
+    }catch(_){ }
+
+    try{
+        atualizarClassificacaoNoRelatorio(nome,classificacao);
+    }catch(_){ }
 }
 
 function nomeClassificacaoPorEstruturaCELK(tr){
     if(!tr) return null;
 
-    // ESTRUTURA CONFIRMADA NOS TESTES DO CELK (12/08/2026):
-    // índice 3 = célula da classificação (icon32 ball-cor)
-    // índice 4 = célula do paciente/nome
-    // Não usar cells_4/cells_5 como regra principal, pois essa numeração
-    // varia conforme a tela/estrutura Wicket.
-    const celulas = Array.from(tr.querySelectorAll("td,th"));
+    const bolaCelula = tr.querySelector(
+        'td[wicketpath*="_cells_5_cell"]'
+    );
 
-    const seletoresBola =
-        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],' +
-        '[class~="ball-green"],[class~="ball-blue"]';
+    const nomeCelula = tr.querySelector(
+        'td[wicketpath*="_cells_6_cell"]'
+    );
 
-    // 1) Estrutura exata confirmada pelo teste do usuário.
-    const bolaCelula = celulas[3] || null;
-    const nomeCelula = celulas[4] || null;
-    const bolaExata = bolaCelula && bolaCelula.querySelector(seletoresBola);
+    const bola = bolaCelula && bolaCelula.querySelector(
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
+    );
 
-    if(bolaExata && nomeCelula){
+    if(bola && nomeCelula){
         const nome = String(
             nomeCelula.innerText || nomeCelula.textContent || ""
         ).replace(/\s+/g," ").trim();
 
-        const classificacao = classeParaClassificacao(bolaExata);
+        const classificacao = classeParaClassificacao(bola);
 
         if(
             nome &&
             pareceNomePaciente(nome) &&
             classificacao !== "NÃO IDENTIFICADA"
         ){
-            return {nome, classificacao};
+            return {nome,classificacao};
         }
     }
 
-    // 2) Fallback por wicketpath, caso o CELK mude a estrutura.
-    const bolaCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_3_cell"]'
-    );
-    const nomeCelulaWicket = tr.querySelector(
-        'td[wicketpath*="_cells_4_cell"]'
-    );
-
-    const bolaWicket = bolaCelulaWicket &&
-        bolaCelulaWicket.querySelector(seletoresBola);
-
-    if(bolaWicket && nomeCelulaWicket){
-        const nome = String(
-            nomeCelulaWicket.innerText ||
-            nomeCelulaWicket.textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        const classificacao = classeParaClassificacao(bolaWicket);
-
-        if(
-            nome &&
-            pareceNomePaciente(nome) &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            return {nome, classificacao};
-        }
-    }
-
-    // 3) Fallback genérico: encontra a bolinha e procura a célula de nome.
-    const bola = tr.querySelector(seletoresBola);
-
-    if(!bola) return null;
-
-    const classificacao = classeParaClassificacao(bola);
-    if(classificacao === "NÃO IDENTIFICADA") return null;
-
-    const indiceBola = celulas.indexOf(bola.closest("td,th"));
-
-    // Normalmente o nome vem imediatamente depois da classificação.
-    for(let i = Math.max(0, indiceBola + 1); i < celulas.length; i++){
-        const nome = String(
-            celulas[i].innerText || celulas[i].textContent || ""
-        ).replace(/\s+/g," ").trim();
-
-        if(pareceNomePaciente(nome)){
-            return {nome, classificacao};
-        }
-    }
-
-    // Último fallback: usa o extrator genérico já existente.
-    const nome = nomeDaLinha(tr);
-    if(nome){
-        return {nome, classificacao};
-    }
-
-    return null;
-}
-
-function obterLinhaDoEventoCELK(evento){
-    if(!evento) return null;
-    try{
-        const alvo=evento.target;
-        if(alvo && alvo.closest){
-            const tr=alvo.closest("tr");
-            if(tr) return tr;
-            const td=alvo.closest("td,th");
-            if(td && td.closest("tr")) return td.closest("tr");
-        }
-        if(typeof evento.composedPath === "function"){
-            for(const item of evento.composedPath()){
-                if(item && item.tagName === "TR") return item;
-                if(item && item.closest){ const tr=item.closest("tr"); if(tr) return tr; }
-            }
-        }
-    }catch(_){}
     return null;
 }
 
 function capturarClassificacaoDaLinha(tr){
     if(!tr) return false;
 
-    const exata = nomeClassificacaoPorEstruturaCELK(tr);
-    if(exata){
-        salvarClassificacaoCache(exata.nome, exata.classificacao);
-        return true;
-    }
-
-    const bola=tr.querySelector(
-        '.icon32.ball-red, .icon32.ball-orange, .icon32.ball-yellow, .icon32.ball-green, .icon32.ball-blue, ' +
-        '[class~="ball-red"], [class~="ball-orange"], [class~="ball-yellow"], [class~="ball-green"], [class~="ball-blue"]'
+    const bola = tr.querySelector(
+        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,' +
+        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
     );
 
     if(!bola) return false;
 
-    const classificacao=classeParaClassificacao(bola);
-    if(classificacao==="NÃO IDENTIFICADA") return false;
+    const classificacao = classeParaClassificacao(bola);
 
-    const nome=nomeDaLinha(tr);
+    if(classificacao === "NÃO IDENTIFICADA") return false;
+
+    const nome = nomeDaLinha(tr);
+
     if(!nome) return false;
 
     salvarClassificacaoCache(nome,classificacao);
     return true;
 }
 
-function extrairMapaClassificacoesDaTabela(){
-    const mapa={};
-
-    const linhas=Array.from(document.querySelectorAll("table tbody tr, table tr"));
-
-    for(const tr of linhas){
-        const bola=tr.querySelector(
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        );
-        if(!bola) continue;
-
-        const classificacao=classeParaClassificacao(bola);
-        const nome=nomeDaLinha(tr);
-        if(!nome || classificacao==="NÃO IDENTIFICADA") continue;
-
-        const chave=normalizarClassificacaoTexto(nome);
-        mapa[chave]=classificacao;
-        salvarClassificacaoCache(nome,classificacao);
-    }
-
-    // Fallback para estruturas Wicket em que o tr não é encontrado diretamente.
-    if(!Object.keys(mapa).length){
-        const bolas=Array.from(document.querySelectorAll(
-            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        ));
-
-        for(const bola of bolas){
-            const tr=encontrarLinhaDaBola(bola);
-            if(!tr) continue;
-            const nome=nomeDaLinha(tr);
-            const classificacao=classeParaClassificacao(bola);
-            if(nome && classificacao!=="NÃO IDENTIFICADA"){
-                mapa[normalizarClassificacaoTexto(nome)]=classificacao;
-                salvarClassificacaoCache(nome,classificacao);
-            }
-        }
-    }
-
-    return mapa;
-}
-
 function sincronizarClassificacoesDaTabela(){
-    return extrairMapaClassificacoesDaTabela();
-}
+    const linhas = Array.from(
+        document.querySelectorAll("table tbody tr, table tr")
+    );
 
-// CAPTURA DIRETA DA LINHA CELK
-// O CELK usa, na linha da tabela:
-// cells_4 = classificação (ball-cor)
-// cells_5 = nome
-// cells_6 = idade
-// cells_8 = chegada
-// Capturamos tudo no mousedown, antes da navegação remover a linha.
-function capturarDadosDiretosDaLinhaCELK(tr){
-    if(!tr) return false;
-
-    try{
-        const celNome = tr.querySelector('[wicketpath*="_cells_5"]');
-        const celIdade = tr.querySelector('[wicketpath*="_cells_6"]');
-        const celClass = tr.querySelector('[wicketpath*="_cells_4"]');
-        const celChegada = tr.querySelector('[wicketpath*="_cells_8"]');
-
-        const nome = String(celNome?.innerText || celNome?.textContent || '').replace(/\\s+/g,' ').trim();
-        const idade = String(celIdade?.innerText || celIdade?.textContent || '').replace(/\\s+/g,' ').trim();
-        const chegadaTexto = String(celChegada?.innerText || celChegada?.textContent || '').replace(/\\s+/g,' ').trim();
-
-        if(!nome) return false;
-
-        const bola = celClass?.querySelector(
-            '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
-            '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-        ) || celClass?.querySelector('[class*="ball-"]');
-
-        const classificacao = classeParaClassificacao(bola);
-
-        let chegada = chegadaTexto;
-        // Extrai apenas o horário da chegada sem usar RegExp, evitando erro de sintaxe no CELK.
-        const partesChegada = String(chegada).split(' - ');
-        if(partesChegada.length > 1){
-            const horario = partesChegada[partesChegada.length - 1].trim();
-            if(/^\d{2}:\d{2}$/.test(horario)) chegada = horario;
-        }
-
-        if(classificacao !== 'NÃO IDENTIFICADA'){
-            salvarClassificacaoCache(nome, classificacao);
-        }
-
-        salvarPacientePendente(
-            nome,
-            idade,
-            chegada,
-            classificacao
-        );
-
-        console.log(
-            '[CELK Helper] CAPTURA DIRETA:',
-            nome,
-            '| IDADE:', idade,
-            '| CLASSIFICAÇÃO:', classificacao,
-            '| CHEGADA:', chegada
-        );
-
-        return true;
-    }catch(err){
-        console.warn('[CELK Helper] FALHA NA CAPTURA DIRETA:', err);
-        return false;
-    }
-}
-
-// Captura ANTES da navegação. Este é o ponto principal da correção:
-// quando o usuário clica no paciente, o CELK pode remover a linha da tabela
-// imediatamente. A classificação precisa estar salva antes disso.
-function instalarCapturaAntecipadaClassificacao(){
-    if(window.celk.classificacaoClickHook) return;
-    window.celk.classificacaoClickHook=true;
-
-    const capturar=function(evento){
-        try{
-            const alvo=obterLinhaDoEventoCELK(evento);
-            if(alvo){
-                // Primeiro captura nome + idade + classificação + chegada
-                // diretamente das cells da linha, antes da navegação do CELK.
-                capturarDadosDiretosDaLinhaCELK(alvo);
-                capturarClassificacaoDaLinha(alvo);
-                const exata=nomeClassificacaoPorEstruturaCELK(alvo);
-                if(exata){
-                    salvarClassificacaoCache(exata.nome,exata.classificacao);
-                    salvarPacientePendente(exata.nome,"","",exata.classificacao);
-                }else{
-                    const bola=alvo.querySelector(
-                        '.icon32.ball-red,.icon32.ball-orange,.icon32.ball-yellow,.icon32.ball-green,.icon32.ball-blue,'+
-                        '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
-                    );
-                    const nome=nomeDaLinha(alvo);
-                    const classificacao=classeParaClassificacao(bola);
-                    if(nome && classificacao!=="NÃO IDENTIFICADA"){
-                        salvarClassificacaoCache(nome,classificacao);
-                        salvarPacientePendente(nome,"","",classificacao);
-                    }
-                }
-                const tabela=alvo.closest("table");
-                if(tabela){
-                    const linhas=Array.from(tabela.querySelectorAll("tr"));
-                    const idx=linhas.indexOf(alvo);
-                    if(idx>=0){
-                        for(let i=Math.max(0,idx-1);i<=Math.min(linhas.length-1,idx+1);i++){
-                            capturarClassificacaoDaLinha(linhas[i]);
-                        }
-                    }
-                }
-            }else{
-                sincronizarClassificacoesDaTabela();
-            }
-        }catch(err){
-            console.warn("[CELK Helper V39] FALHA NA CAPTURA ANTECIPADA:",err);
-        }
-    };
-
-    document.addEventListener("mousedown",capturar,true);
-    document.addEventListener("click",capturar,true);
-
-    // MutationObserver mantém o cache atualizado quando o CELK reconstrói a tabela.
-    if(window.MutationObserver){
-        const obs=new MutationObserver(function(){
-            if(window.celk._classificacaoScanTimer) return;
-            window.celk._classificacaoScanTimer=setTimeout(function(){
-                window.celk._classificacaoScanTimer=null;
-                try{ sincronizarClassificacoesDaTabela(); }catch(_){ }
-            },100);
-        });
-
-        obs.observe(document.body,{childList:true,subtree:true});
-        window.celk.classificacaoObserver=obs;
-    }
+    linhas.forEach(function(tr){
+        try{ capturarClassificacaoDaLinha(tr); }catch(_){ }
+    });
 }
 
 function obterClassificacaoDoCache(nomePaciente){
-    const nome=normalizarClassificacaoTexto(nomePaciente);
+    const nome = normalizarClassificacaoTexto(nomePaciente);
+
     if(!nome) return "NÃO IDENTIFICADA";
 
     try{
-        const cache=JSON.parse(localStorage.getItem("celk_classificacoes_cache")||"{}");
+        const cache = JSON.parse(
+            localStorage.getItem("celk_classificacoes_cache") || "{}"
+        );
+
         return cache[nome] || "NÃO IDENTIFICADA";
     }catch(_){
         return "NÃO IDENTIFICADA";
@@ -2458,91 +2276,564 @@ function obterClassificacaoDoCache(nomePaciente){
 }
 
 function obterClassificacao(nomePaciente){
-    const nome=normalizarClassificacaoTexto(nomePaciente);
+    const nome = normalizarClassificacaoTexto(nomePaciente);
+
     if(!nome) return "NÃO IDENTIFICADA";
 
-    // Primeiro: linha atual.
-    const linhas=Array.from(document.querySelectorAll("table tr"));
-    for(const tr of linhas){
-        const nomeLinha=normalizarClassificacaoTexto(nomeDaLinha(tr));
-        if(!nomeLinha || nomeLinha!==nome) continue;
+    const linhas = Array.from(
+        document.querySelectorAll("table tbody tr, table tr")
+    );
 
-        const bola=tr.querySelector(
+    for(const tr of linhas){
+        const nomeLinha = normalizarClassificacaoTexto(
+            nomeDaLinha(tr)
+        );
+
+        if(!nomeLinha || nomeLinha !== nome) continue;
+
+        const bola = tr.querySelector(
             '[class~="ball-red"],[class~="ball-orange"],[class~="ball-yellow"],[class~="ball-green"],[class~="ball-blue"]'
         );
-        const c=classeParaClassificacao(bola);
-        if(c!=="NÃO IDENTIFICADA"){
-            salvarClassificacaoCache(nome,c);
-            return c;
+
+        const classificacao = classeParaClassificacao(bola);
+
+        if(classificacao !== "NÃO IDENTIFICADA"){
+            salvarClassificacaoCache(nome,classificacao);
+            return classificacao;
         }
     }
 
-    // Segundo: cache persistente capturado antes da navegação.
-    const cache=obterClassificacaoDoCache(nome);
-    if(cache!=="NÃO IDENTIFICADA") return cache;
-
-    console.warn("[CELK Helper V32] CLASSIFICAÇÃO NÃO ENCONTRADA:",nome);
-    return "NÃO IDENTIFICADA";
+    return obterClassificacaoDoCache(nome);
 }
 
-// --------------------------------------------------
-// RELATÓRIO DO PLANTÃO — V39
-// PRÉ-REGISTRO + CLASSIFICAÇÃO + FINALIZAÇÃO
-// --------------------------------------------------
-// A lógica abaixo mantém o paciente no relatório assim que ele é
-// identificado/aberto, mas só preenche "Atendido" e "Tempo" quando
-// o atendimento é efetivamente finalizado.
-//
-// Isso permite que o relatório mostre:
-// ✓ pacientes já atendidos
-// ✓ pacientes aguardando atendimento
-// ✓ classificação capturada pela pulseira
-// ✓ horário de chegada
-// ✓ horário de atendimento
-// ✓ tempo de espera
-//
-// A classificação é capturada ANTES de o CELK remover a linha da tabela.
-// O registro é persistido em localStorage para sobreviver à navegação.
+// =========================================================
+// HORÁRIOS E CÁLCULOS
+// =========================================================
 
-function escaparHtmlRelatorio(valor){
-    return String(valor ?? "")
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#39;");
+function obterHorarioAtualRelatorio(){
+    const agora = new Date();
+
+    return agora.getHours().toString().padStart(2,"0") + ":" +
+           agora.getMinutes().toString().padStart(2,"0");
 }
 
-function calcularTempoRelatorio(chegada, agora){
-    if(!chegada || !/^\d{1,2}:\d{2}$/.test(String(chegada).trim())){
+function minutosEntreHorariosRelatorio(inicio,fim){
+    if(
+        !/^\d{1,2}:\d{2}$/.test(String(inicio || "").trim()) ||
+        !/^\d{1,2}:\d{2}$/.test(String(fim || "").trim())
+    ){
         return "";
     }
 
-    const partes = String(chegada).trim().split(":");
-    const inicio = new Date(agora);
+    const p1 = String(inicio).trim().split(":");
+    const p2 = String(fim).trim().split(":");
 
-    inicio.setHours(
-        Number(partes[0]),
-        Number(partes[1]),
-        0,
-        0
-    );
+    const m1 = Number(p1[0]) * 60 + Number(p1[1]);
+    const m2 = Number(p2[0]) * 60 + Number(p2[1]);
 
-    let minutos = Math.floor((agora - inicio) / 60000);
+    let minutos = m2 - m1;
 
-    // Virada de dia.
     if(minutos < 0){
         minutos += 24 * 60;
     }
 
+    return minutos;
+}
+
+function formatarTempoRelatorio(minutos){
+    if(minutos === "" || minutos == null) return "";
+
+    minutos = Number(minutos);
+
+    if(!Number.isFinite(minutos)) return "";
+
+    if(minutos < 60){
+        return minutos + " min";
+    }
+
+    const horas = Math.floor(minutos / 60);
+    const mins = minutos % 60;
+
+    if(mins === 0){
+        return horas + " h";
+    }
+
+    return horas + " h " + mins + " min";
+}
+
+function calcularTempoEntreHorarios(chegada,atendido){
+    const minutos = minutosEntreHorariosRelatorio(
+        chegada,
+        atendido
+    );
+
+    return formatarTempoRelatorio(minutos);
+}
+
+function calcularTempoAtendimentoRelatorio(atendido,saida){
+    const minutos = minutosEntreHorariosRelatorio(
+        atendido,
+        saida
+    );
+
+    if(minutos === "" || minutos == null){
+        return "";
+    }
+
+    // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+    // Sempre exibe o valor em minutos.
     return minutos + " min";
 }
 
-function renumerarRelatorio(lista){
-    lista.forEach(function(paciente, indice){
-        paciente.numero = indice + 1;
-    });
+function calcularTempoTotalRelatorio(chegada,saida){
+    const minutos = minutosEntreHorariosRelatorio(
+        chegada,
+        saida
+    );
+
+    return formatarTempoRelatorio(minutos);
 }
+
+// Mantida para compatibilidade com partes antigas do V32.
+function calcularTempoRelatorio(chegada,agora){
+    if(
+        !chegada ||
+        !/^\d{1,2}:\d{2}$/.test(String(chegada).trim())
+    ){
+        return "";
+    }
+
+    const h = agora.getHours();
+    const m = agora.getMinutes();
+    const atual = h * 60 + m;
+    const partes = String(chegada).trim().split(":");
+    const inicio = Number(partes[0]) * 60 + Number(partes[1]);
+
+    let minutos = atual - inicio;
+
+    if(minutos < 0){
+        minutos += 24 * 60;
+    }
+
+    return formatarTempoRelatorio(minutos);
+}
+
+// =========================================================
+// DADOS DA LINHA / ENTRADA
+// =========================================================
+
+function extrairDadosDaLinhaPaciente(tr){
+    if(!tr){
+        return {
+            nome:"",
+            idade:"",
+            chegada:"",
+            classificacao:"NÃO IDENTIFICADA"
+        };
+    }
+
+    const celulas = Array.from(tr.querySelectorAll("td,th"));
+
+    // NOME: mantém o seletor conhecido e usa fallback pelo conteúdo da linha.
+    let nomeCelula = tr.querySelector(
+        'td[wicketpath*="_cells_6_cell"]'
+    );
+
+    let nome = String(
+        (nomeCelula && (nomeCelula.innerText || nomeCelula.textContent)) || ""
+    ).replace(/\s+/g," ").trim();
+
+    if(!nome || !pareceNomePaciente(nome)){
+        nome = "";
+        for(const td of celulas){
+            const txt = String(
+                td.innerText || td.textContent || ""
+            ).replace(/\s+/g," ").trim();
+
+            if(pareceNomePaciente(txt)){
+                nome = txt;
+                break;
+            }
+        }
+    }
+
+    // IDADE: mantém o seletor conhecido e usa fallback por padrão de idade.
+    let idadeCelula = tr.querySelector(
+        'td[wicketpath*="_cells_7_cell"]'
+    );
+
+    let idade = String(
+        (idadeCelula && (idadeCelula.innerText || idadeCelula.textContent)) || ""
+    ).replace(/\s+/g," ").trim();
+
+    if(!idade){
+        const idadeFallback = celulas.find(function(td){
+            const txt = String(
+                td.innerText || td.textContent || ""
+            ).replace(/\s+/g," ").trim();
+
+            return (
+                /^\d+\s+anos?(?:\s+e\s+\d+\s+(?:meses?|dias?))?$/i.test(txt) ||
+                /^\d+\s+meses?(?:\s+e\s+\d+\s+dias?)?$/i.test(txt)
+            );
+        });
+
+        if(idadeFallback){
+            idade = String(
+                idadeFallback.innerText || idadeFallback.textContent || ""
+            ).replace(/\s+/g," ").trim();
+        }
+    }
+
+    // CHEGADA: NÃO depende do índice da célula.
+    // Procura diretamente a célula que contém "dd/mm/aaaa - HH:MM".
+    let chegadaCelula = celulas.find(function(td){
+        const txt = String(
+            td.innerText || td.textContent || ""
+        ).replace(/\s+/g," ").trim();
+
+        return /\d{2}\/\d{2}\/\d{4}\s*[-–]\s*\d{2}:\d{2}/.test(txt);
+    }) || null;
+
+    const chegadaTexto = String(
+        (chegadaCelula && (chegadaCelula.innerText || chegadaCelula.textContent)) || ""
+    ).replace(/\s+/g," ").trim();
+
+    let chegada = "";
+
+    const mChegada = chegadaTexto.match(
+        /(?:\d{2}\/\d{2}\/\d{4}\s*[-–]\s*)?(\d{2}:\d{2})/
+    );
+
+    if(mChegada){
+        chegada = mChegada[1];
+    }
+
+    // CLASSIFICAÇÃO: procura a bolinha diretamente na linha.
+    // Isso funciona mesmo se o Wicket mudar cells_5 para cells_1,
+    // como no elemento mostrado no DevTools.
+    const bola = tr.querySelector(
+        '[class~="ball-red"],' +
+        '[class~="ball-orange"],' +
+        '[class~="ball-yellow"],' +
+        '[class~="ball-green"],' +
+        '[class~="ball-blue"]'
+    );
+
+    let classificacao = classeParaClassificacao(bola);
+
+    if(
+        classificacao === "NÃO IDENTIFICADA" &&
+        nome
+    ){
+        classificacao = obterClassificacaoDoCache(nome);
+    }
+
+    return {
+        nome,
+        idade,
+        chegada,
+        classificacao
+    };
+}
+
+
+function registrarEntradaNoRelatorioAoAtender(){
+    let dados = null;
+
+    try{
+        dados = window.celk.ultimaEntradaDados || null;
+    }catch(_){}
+
+    if(!dados){
+        try{
+            dados = JSON.parse(
+                localStorage.getItem("celk_paciente_pendente") || "null"
+            );
+        }catch(_){}
+    }
+
+    if(!dados || !dados.nome){
+        return false;
+    }
+
+    let classificacao = String(
+        dados.classificacao || ""
+    ).trim();
+
+    if(
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ){
+        classificacao = obterClassificacaoDoCache(dados.nome);
+    }
+
+    preRegistrarNoRelatorio(
+        dados.nome,
+        dados.idade || "",
+        dados.chegada || "",
+        classificacao
+    );
+
+    return true;
+}
+
+function preRegistrarNoRelatorio(nome,idade,chegada,classificacao){
+    nome = String(nome || "").trim();
+
+    if(!nome || nome === "Não encontrado") return false;
+
+    let classificacaoResolvida = String(
+        classificacao || ""
+    ).trim();
+
+    if(
+        !classificacaoResolvida ||
+        classificacaoResolvida === "NÃO IDENTIFICADA"
+    ){
+        classificacaoResolvida = obterClassificacaoDoCache(nome);
+    }
+
+    if(classificacaoResolvida === "NÃO IDENTIFICADA"){
+        classificacaoResolvida = obterClassificacao(nome);
+    }
+
+    if(!classificacaoResolvida){
+        classificacaoResolvida = "NÃO IDENTIFICADA";
+    }
+
+    const lista = obterListaRelatorio();
+
+    let paciente = localizarPacienteNoRelatorio(
+        lista,
+        nome,
+        chegada
+    );
+
+    if(!paciente){
+        paciente = {
+            numero:lista.length + 1,
+            nome:nome,
+            idade:String(idade || "").trim(),
+            classificacao:classificacaoResolvida,
+            chegada:String(chegada || "").trim(),
+            atendido:"",
+            tempo:"",
+            saida:"",
+            tempoAtendimento:"",
+            tempoTotal:""
+        };
+
+        lista.push(paciente);
+    }else{
+        if(idade) paciente.idade = String(idade).trim();
+        if(chegada) paciente.chegada = String(chegada).trim();
+
+        if(
+            classificacaoResolvida &&
+            classificacaoResolvida !== "NÃO IDENTIFICADA"
+        ){
+            paciente.classificacao = classificacaoResolvida;
+        }
+
+        // Compatibilidade com registros antigos.
+        if(typeof paciente.saida === "undefined") paciente.saida = "";
+        if(typeof paciente.tempoAtendimento === "undefined") paciente.tempoAtendimento = "";
+        if(typeof paciente.tempoTotal === "undefined") paciente.tempoTotal = "";
+    }
+
+    salvarListaRelatorio(lista);
+
+    console.log(
+        "[CELK RELATÓRIO] ENTRADA REGISTRADA:",
+        paciente.nome,
+        "| IDADE:",paciente.idade,
+        "| CLASSIFICAÇÃO:",paciente.classificacao,
+        "| CHEGADA:",paciente.chegada
+    );
+
+    return true;
+}
+
+function salvarPacientePendente(nome,idade,chegada,classificacao){
+    const dados = {
+        nome:String(nome || "").trim(),
+        idade:String(idade || "").trim(),
+        chegada:String(chegada || "").trim(),
+        classificacao:String(classificacao || "NÃO IDENTIFICADA").trim(),
+        salvoEm:Date.now()
+    };
+
+    if(!dados.nome) return;
+
+    try{
+        let historico = JSON.parse(
+            localStorage.getItem("celk_pendentes_historico") || "[]"
+        );
+
+        if(!Array.isArray(historico)) historico=[];
+
+        historico.push(dados);
+
+        if(historico.length > 30){
+            historico = historico.slice(-30);
+        }
+
+        localStorage.setItem(
+            "celk_pendentes_historico",
+            JSON.stringify(historico)
+        );
+
+        localStorage.setItem(
+            "celk_paciente_pendente",
+            JSON.stringify(dados)
+        );
+    }catch(_){ }
+
+    preRegistrarNoRelatorio(
+        dados.nome,
+        dados.idade,
+        dados.chegada,
+        dados.classificacao
+    );
+}
+
+function registrarEntradaAoClicarPacienteCELK(tr,evento){
+    if(!tr) return false;
+
+    window.celk.ultimaEntradaRelatorio = Date.now();
+
+    const dados = extrairDadosDaLinhaPaciente(tr);
+
+    if(!dados.nome || !pareceNomePaciente(dados.nome)){
+        console.warn(
+            "[CELK RELATÓRIO] CLIQUE SEM NOME DE PACIENTE:",
+            dados
+        );
+        return false;
+    }
+
+    // CHEGADA continua vindo da célula da fila do CELK.
+    // Não usa o horário do clique.
+    const chegada = dados.chegada || "";
+
+    let classificacao = dados.classificacao;
+
+    if(
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ){
+        classificacao = obterClassificacaoDoCache(dados.nome);
+    }
+
+    if(
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ){
+        classificacao = obterClassificacao(dados.nome);
+    }
+
+    salvarPacientePendente(
+        dados.nome,
+        dados.idade,
+        chegada,
+        classificacao
+    );
+
+    console.log(
+        "[CELK RELATÓRIO] ENTRADA REGISTRADA:",
+        dados.nome,
+        "| IDADE:", dados.idade,
+        "| CLASSIFICAÇÃO:", classificacao,
+        "| CHEGADA:", chegada
+    );
+
+    return true;
+}
+
+function instalarCapturaCliquePaciente(){
+    if(window.celk.relatorioCliquePacienteInstalado) return;
+
+    window.celk.relatorioCliquePacienteInstalado = true;
+
+    function processarEvento(evento){
+        try{
+            const tr = obterLinhaDoEventoCELK(evento);
+
+            if(!tr) return;
+
+            const dados = extrairDadosDaLinhaPaciente(tr);
+
+            if(
+                !dados.nome ||
+                !pareceNomePaciente(dados.nome)
+            ){
+                return;
+            }
+
+            if(
+                evento.target &&
+                evento.target.closest &&
+                evento.target.closest("th")
+            ){
+                return;
+            }
+
+            let classificacao = dados.classificacao;
+
+            if(
+                !classificacao ||
+                classificacao === "NÃO IDENTIFICADA"
+            ){
+                classificacao = obterClassificacaoDoCache(dados.nome);
+            }
+
+            if(
+                !classificacao ||
+                classificacao === "NÃO IDENTIFICADA"
+            ){
+                classificacao = obterClassificacao(dados.nome);
+            }
+
+            // Guarda exatamente os dados da linha antes de o CELK removê-la.
+            window.celk.ultimaEntradaDados = {
+                nome:dados.nome,
+                idade:dados.idade,
+                chegada:dados.chegada,
+                classificacao:classificacao
+            };
+
+            if(evento.type === "mousedown"){
+                registrarEntradaAoClicarPacienteCELK(tr,evento);
+                return;
+            }
+
+            if(
+                !window.celk.ultimaEntradaRelatorio ||
+                Date.now() - window.celk.ultimaEntradaRelatorio > 1200
+            ){
+                registrarEntradaAoClicarPacienteCELK(tr,evento);
+            }
+
+        }catch(err){
+            console.warn(
+                "[CELK RELATÓRIO] FALHA AO REGISTRAR ENTRADA:",
+                err
+            );
+        }
+    }
+
+    document.addEventListener("mousedown",processarEvento,true);
+    document.addEventListener("click",processarEvento,true);
+
+    console.log(
+        "[CELK RELATÓRIO] CAPTURA DE CLIQUE NO PACIENTE INSTALADA — LINHA COMPLETA."
+    );
+}
+
+// =========================================================
+// DADOS DO RELATÓRIO
+// =========================================================
 
 function obterListaRelatorio(){
     try{
@@ -2556,6 +2847,12 @@ function obterListaRelatorio(){
     }
 }
 
+function renumerarRelatorio(lista){
+    lista.forEach(function(paciente,indice){
+        paciente.numero = indice + 1;
+    });
+}
+
 function salvarListaRelatorio(lista){
     renumerarRelatorio(lista);
 
@@ -2563,477 +2860,923 @@ function salvarListaRelatorio(lista){
         "celk_relatorio",
         JSON.stringify(lista)
     );
+
+    try{
+        if(
+            window.celkRelatorioWindow &&
+            !window.celkRelatorioWindow.closed
+        ){
+            window.celkRelatorioWindow.postMessage(
+                {
+                    tipo:"CELK_RELATORIO_ATUALIZAR",
+                    lista:lista
+                },
+                "*"
+            );
+        }
+    }catch(_){ }
 }
 
 function atualizarClassificacaoNoRelatorio(nome,classificacao){
-    if(!nome || !classificacao || classificacao==="NÃO IDENTIFICADA") return;
-    const lista=obterListaRelatorio();
-    const chave=normalizarClassificacaoTexto(nome);
-    let alterou=false;
+    if(
+        !nome ||
+        !classificacao ||
+        classificacao === "NÃO IDENTIFICADA"
+    ) return;
+
+    const lista = obterListaRelatorio();
+    const chave = normalizarClassificacaoTexto(nome);
+    let alterou = false;
+
     lista.forEach(function(paciente){
-        if(normalizarClassificacaoTexto(paciente.nome)===chave && paciente.classificacao==="NÃO IDENTIFICADA"){
-            paciente.classificacao=classificacao;
-            alterou=true;
+        if(
+            normalizarClassificacaoTexto(paciente.nome) === chave &&
+            (
+                !paciente.classificacao ||
+                paciente.classificacao === "NÃO IDENTIFICADA"
+            )
+        ){
+            paciente.classificacao = classificacao;
+            alterou = true;
         }
     });
+
     if(alterou){
         salvarListaRelatorio(lista);
-        console.log("[CELK RELATÓRIO V39] CLASSIFICAÇÃO ATUALIZADA:",nome,"=>",classificacao);
     }
 }
 
-// Procura o registro correspondente ao paciente.
-// Primeiro usa nome + chegada; depois usa um registro ainda não atendido
-// do mesmo paciente. Isso permite transformar o pré-registro em definitivo.
-function localizarPacienteNoRelatorio(lista, nome, chegada){
+function localizarPacienteNoRelatorio(lista,nome,chegada){
     const nomeNormalizado = normalizarClassificacaoTexto(nome);
     const chegadaNormalizada = String(chegada || "").trim();
 
-    if(!nomeNormalizado){
-        return null;
-    }
-
-    let paciente = null;
+    if(!nomeNormalizado) return null;
 
     if(chegadaNormalizada){
-        paciente = lista.find(function(item){
+        const exato = lista.find(function(item){
             return (
                 normalizarClassificacaoTexto(item.nome) === nomeNormalizado &&
                 String(item.chegada || "").trim() === chegadaNormalizada
             );
         });
 
-        if(paciente){
-            return paciente;
-        }
+        if(exato) return exato;
     }
 
-    paciente = lista.find(function(item){
+    const aberto = lista.find(function(item){
         return (
             normalizarClassificacaoTexto(item.nome) === nomeNormalizado &&
-            !item.atendido
+            !item.saida
         );
     });
 
-    if(paciente){
-        return paciente;
-    }
+    if(aberto) return aberto;
 
-    // Último fallback: mesmo nome.
     return lista.find(function(item){
         return normalizarClassificacaoTexto(item.nome) === nomeNormalizado;
     }) || null;
 }
 
-// Registra o paciente no relatório sem marcar como atendido.
-// É chamado no momento em que o paciente é aberto/pré-registrado.
-function preRegistrarNoRelatorio(nome, idade, chegada, classificacao){
-    nome = String(nome || "").trim();
-
-    if(!nome || nome === "Não encontrado"){
-        return false;
-    }
-
-    const lista = obterListaRelatorio();
-
-    let paciente = localizarPacienteNoRelatorio(
-        lista,
-        nome,
-        chegada
-    );
-
-    if(!paciente){
-        paciente = {
-            numero: lista.length + 1,
-            nome: nome,
-            idade: String(idade || "").trim(),
-            classificacao:
-                classificacao || "NÃO IDENTIFICADA",
-            chegada: String(chegada || "").trim(),
-            atendido: "",
-            tempo: ""
-        };
-
-        lista.push(paciente);
-
-    }else{
-
-        if(idade){
-            paciente.idade = String(idade).trim();
-        }
-
-        if(chegada){
-            paciente.chegada = String(chegada).trim();
-        }
-
-        if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            paciente.classificacao = classificacao;
-        }
-    }
-
-    salvarListaRelatorio(lista);
-
-    console.log(
-        "[CELK RELATÓRIO V39] PACIENTE PRÉ-REGISTRADO:",
-        paciente.nome,
-        "=>",
-        paciente.classificacao
-    );
-
-    return true;
-}
-
-function salvarPacientePendente(
-    nome,
-    idade,
-    chegada,
-    classificacao
-){
-    const dados = {
-        nome: String(nome || "").trim(),
-        idade: String(idade || "").trim(),
-        chegada: String(chegada || "").trim(),
-        classificacao:
-            classificacao || "NÃO IDENTIFICADA",
-        salvoEm: Date.now()
-    };
-
-    if(
-        !dados.nome ||
-        dados.nome === "Não encontrado"
-    ){
-        return;
-    }
-
-    try{
-        localStorage.setItem(
-            "celk_paciente_pendente",
-            JSON.stringify(dados)
-        );
-    }catch(_){}
-
-    // IMPORTANTE:
-    // o paciente entra no relatório imediatamente, mas
-    // "Atendido" e "Tempo" continuam vazios.
-    preRegistrarNoRelatorio(
-        dados.nome,
-        dados.idade,
-        dados.chegada,
-        dados.classificacao
-    );
-
-    console.log(
-        "[CELK RELATÓRIO V39] PRÉ-REGISTRO:",
-        dados.nome,
-        "=>",
-        dados.classificacao
-    );
-}
-
-function registrarPacienteEmAtendimento(
-    nome,
-    idade,
-    chegada
-){
-    let classificacao =
-        obterClassificacaoDoCache(nome);
-
-    if(
-        classificacao === "NÃO IDENTIFICADA"
-    ){
-        classificacao = obterClassificacao(nome);
-    }
-
-    salvarPacientePendente(
-        nome,
-        idade,
-        chegada,
-        classificacao
-    );
-}
-
 function dadosPacienteAtual(){
     try{
         const salvo = JSON.parse(
-            localStorage.getItem(
-                "celk_paciente_pendente"
-            ) || "null"
+            localStorage.getItem("celk_paciente_pendente") || "null"
         );
 
         if(salvo && salvo.nome){
-            // Tenta completar classificação pelo cache atual.
             if(
                 !salvo.classificacao ||
                 salvo.classificacao === "NÃO IDENTIFICADA"
             ){
-                const cache =
-                    obterClassificacaoDoCache(salvo.nome);
-
-                if(cache !== "NÃO IDENTIFICADA"){
-                    salvo.classificacao = cache;
-                }
+                salvo.classificacao = obterClassificacaoDoCache(
+                    salvo.nome
+                );
             }
 
             return salvo;
         }
-    }catch(_){}
+    }catch(_){ }
 
-    // Fallback: extrai o paciente diretamente
-    // do cabeçalho do prontuário.
     const tela = document.body.innerText || "";
 
     const cab = tela.match(
         /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
     );
 
-    if(!cab){
-        return null;
-    }
-
-    let chegada = "";
-
-    const mTriagem = tela.match(
-        /TRIAGEM[\s\S]*?([0-9]{2}\/\d{2}\/\d{4})\s*-\s*([0-9]{2}:\d{2})/i
-    );
-
-    if(mTriagem){
-        chegada = mTriagem[2];
-    }
+    if(!cab) return null;
 
     const nome = cab[1].trim();
     const idade = cab[2].trim();
 
-    const classificacao =
-        obterClassificacaoDoCache(nome);
-
     return {
         nome,
         idade,
-        chegada,
-        classificacao
+        chegada:"",
+        classificacao:obterClassificacaoDoCache(nome)
     };
 }
 
-function registrarFinalizacaoRelatorio(){
-    const dados = dadosPacienteAtual();
+// =========================================================
+// ATENDIDO — INÍCIO REAL DO ATENDIMENTO
+// =========================================================
+
+function registrarAtendimentoRelatorio(){
+    try{
+        let dados = null;
+
+        try{
+            dados = JSON.parse(
+                localStorage.getItem("celk_paciente_pendente") || "null"
+            );
+        }catch(_){
+            dados = null;
+        }
+
+        if(!dados || !dados.nome){
+            dados = dadosPacienteAtual();
+        }
+
+        if(!dados || !dados.nome){
+            console.warn(
+                "[CELK RELATÓRIO] NÃO FOI POSSÍVEL IDENTIFICAR O PACIENTE PARA ATENDIDO."
+            );
+            return false;
+        }
+
+        const lista = obterListaRelatorio();
+
+        let paciente = localizarPacienteNoRelatorio(
+            lista,
+            dados.nome,
+            dados.chegada
+        );
+
+        if(!paciente){
+            paciente = {
+                numero:lista.length + 1,
+                nome:dados.nome,
+                idade:dados.idade || "",
+                classificacao:dados.classificacao || "NÃO IDENTIFICADA",
+                chegada:dados.chegada || "",
+                atendido:"",
+                tempo:"",
+                saida:"",
+                tempoAtendimento:"",
+                tempoTotal:""
+            };
+
+            lista.push(paciente);
+        }
+
+        if(typeof paciente.saida === "undefined") paciente.saida = "";
+        if(typeof paciente.tempoAtendimento === "undefined") paciente.tempoAtendimento = "";
+        if(typeof paciente.tempoTotal === "undefined") paciente.tempoTotal = "";
+
+        // Não sobrescreve se já foi registrado.
+        if(!paciente.atendido){
+            paciente.atendido = obterHorarioAtualRelatorio();
+        }
+
+        paciente.tempo = calcularTempoEntreHorarios(
+            paciente.chegada,
+            paciente.atendido
+        );
+
+        salvarListaRelatorio(lista);
+
+        console.log(
+            "[CELK RELATÓRIO] ATENDIDO REGISTRADO:",
+            paciente.nome,
+            "| CHEGADA:",paciente.chegada,
+            "| ATENDIDO:",paciente.atendido,
+            "| TEMPO:",paciente.tempo
+        );
+
+        return true;
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO REGISTRAR ATENDIDO:",
+            err
+        );
+        return false;
+    }
+}
+
+function instalarCapturaInicioAtendimentoRelatorio(){
+    if(window.celk.relatorioInicioAtendimentoInstalado) return;
+    window.celk.relatorioInicioAtendimentoInstalado = true;
+
+    function eBotaoDeInicio(evento){
+        const alvo = evento && evento.target;
+        if(!alvo) return false;
+
+        let el = null;
+
+        try{
+            if(alvo.closest){
+                el = alvo.closest("button");
+            }
+        }catch(_){ }
+
+        if(!el) return false;
+
+        const texto = normalizarCelk(
+            el.innerText ||
+            el.textContent ||
+            el.getAttribute("title") ||
+            el.getAttribute("aria-label") || ""
+        );
+
+        // São os botões do próprio CELK Helper.
+        return (
+            texto === "ATENDIMENTO" ||
+            texto.includes("01 CLIN") ||
+            texto.includes("10 PED")
+        );
+    }
+
+    function capturarInicio(evento){
+        try{
+            if(!eBotaoDeInicio(evento)) return;
+
+            const agora = Date.now();
+
+            if(
+                window.celk.ultimoAtendidoRelatorio &&
+                agora - window.celk.ultimoAtendidoRelatorio < 1000
+            ){
+                return;
+            }
+
+            window.celk.ultimoAtendidoRelatorio = agora;
+
+            registrarAtendimentoRelatorio();
+        }catch(err){
+            console.error(
+                "[CELK RELATÓRIO] ERRO AO CAPTURAR INÍCIO DO ATENDIMENTO:",
+                err
+            );
+        }
+    }
+
+    // Capture = registra antes do onclick do botão do Helper.
+    document.addEventListener("click",capturarInicio,true);
+
+    console.log(
+        "[CELK RELATÓRIO] CAPTURA DE ATENDIDO INSTALADA."
+    );
+}
+
+// =========================================================
+// SAÍDA — FINALIZAÇÃO DO ATENDIMENTO
+// =========================================================
+
+function registrarFinalizacaoRelatorio(dadosForcado){
+    let dados = dadosForcado || null;
+
+    if(!dados){
+        try{
+            dados = JSON.parse(
+                localStorage.getItem("celk_paciente_pendente") || "null"
+            );
+        }catch(_){
+            dados = null;
+        }
+    }
+
+    if(!dados || !dados.nome){
+        dados = dadosPacienteAtual();
+    }
 
     if(!dados || !dados.nome){
         console.warn(
-            "[CELK RELATÓRIO V39] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
+            "[CELK RELATÓRIO] FINALIZAÇÃO SEM PACIENTE IDENTIFICADO."
         );
         return false;
     }
 
-    const agora = new Date();
+    // SAÍDA = horário REAL do clique em FINALIZAR/CONCLUIR.
+    // Capturado antes da ação do CELK. Sem +10 minutos.
+    const saida = obterHorarioAtualRelatorio();
 
-    const atendido =
-        agora.getHours().toString().padStart(2,"0") +
-        ":" +
-        agora.getMinutes().toString().padStart(2,"0");
+    let chegada = String(dados.chegada || "").trim();
+    const lista = obterListaRelatorio();
 
-    let classificacao =
-        dados.classificacao || "NÃO IDENTIFICADA";
+    let paciente = lista.find(function(item){
+        return (
+            normalizarClassificacaoTexto(item.nome) ===
+            normalizarClassificacaoTexto(dados.nome) &&
+            !item.saida
+        );
+    });
+
+    if(!paciente){
+        paciente = localizarPacienteNoRelatorio(
+            lista,
+            dados.nome,
+            chegada
+        );
+    }
+
+    if(!paciente){
+        paciente = {
+            numero:lista.length + 1,
+            nome:dados.nome,
+            idade:dados.idade || "",
+            classificacao:dados.classificacao || "NÃO IDENTIFICADA",
+            chegada:chegada,
+            atendido:"",
+            tempo:"",
+            saida:"",
+            tempoAtendimento:"",
+            tempoTotal:""
+        };
+
+        lista.push(paciente);
+    }
+
+    if(typeof paciente.saida === "undefined") paciente.saida = "";
+    if(typeof paciente.tempoAtendimento === "undefined") paciente.tempoAtendimento = "";
+    if(typeof paciente.tempoTotal === "undefined") paciente.tempoTotal = "";
+
+    if(!chegada){
+        chegada = String(paciente.chegada || "").trim();
+    }
+
+    if(chegada){
+        paciente.chegada = chegada;
+    }
+
+    if(dados.idade){
+        paciente.idade = dados.idade;
+    }
+
+    let classificacao = dados.classificacao || "NÃO IDENTIFICADA";
 
     if(classificacao === "NÃO IDENTIFICADA"){
-        const cache =
-            obterClassificacaoDoCache(dados.nome);
-
+        const cache = obterClassificacaoDoCache(dados.nome);
         if(cache !== "NÃO IDENTIFICADA"){
             classificacao = cache;
         }
     }
 
-    const lista = obterListaRelatorio();
+    if(
+        classificacao &&
+        classificacao !== "NÃO IDENTIFICADA"
+    ){
+        paciente.classificacao = classificacao;
+    }
 
-    let paciente = localizarPacienteNoRelatorio(
-        lista,
-        dados.nome,
-        dados.chegada
-    );
-
-    if(!paciente){
-
-        paciente = {
-            numero: lista.length + 1,
-            nome: dados.nome,
-            idade: dados.idade || "",
-            classificacao: classificacao,
-            chegada: dados.chegada || "",
-            atendido: atendido,
-            tempo: calcularTempoRelatorio(
-                dados.chegada,
-                agora
-            )
-        };
-
-        lista.push(paciente);
-
-    }else{
-
-        paciente.nome = dados.nome;
-
-        if(dados.idade){
-            paciente.idade = dados.idade;
-        }
-
-        if(dados.chegada){
-            paciente.chegada = dados.chegada;
-        }
-
-        if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA"
-        ){
-            paciente.classificacao = classificacao;
-        }
-
-        paciente.atendido = atendido;
-
-        paciente.tempo = calcularTempoRelatorio(
-            paciente.chegada,
-            agora
+    // ATENDIDO NÃO pode ser preenchido pela SAÍDA.
+    // Ele deve existir somente se foi capturado no clique real
+    // de ATENDIMENTO.
+    if(!paciente.atendido){
+        console.warn(
+            "[CELK RELATÓRIO] SAÍDA registrada sem ATENDIDO capturado:",
+            paciente.nome
         );
     }
+
+    // SAÍDA = horário real da finalização confirmada pelo CELK.
+    if(!paciente.saida){
+        paciente.saida = saida;
+    }
+
+    paciente.tempo = calcularTempoEntreHorarios(
+        paciente.chegada,
+        paciente.atendido
+    );
+
+    paciente.tempoAtendimento = calcularTempoAtendimentoRelatorio(
+        paciente.atendido,
+        paciente.saida
+    );
+
+    paciente.tempoTotal = calcularTempoTotalRelatorio(
+        paciente.chegada,
+        paciente.saida
+    );
 
     salvarListaRelatorio(lista);
 
     console.log(
-        "[CELK RELATÓRIO V39] FINALIZAÇÃO REGISTRADA:",
+        "[CELK RELATÓRIO] SAÍDA REGISTRADA:",
         paciente.nome,
-        "=>",
-        paciente.classificacao,
-        "|",
-        paciente.atendido,
-        "|",
-        paciente.tempo
+        "| CHEGADA:",paciente.chegada,
+        "| ATENDIDO:",paciente.atendido,
+        "| TEMPO:",paciente.tempo,
+        "| SAÍDA:",paciente.saida,
+        "| T. ATENDIMENTO:",paciente.tempoAtendimento,
+        "| T. TOTAL:",paciente.tempoTotal
     );
 
     try{
-        localStorage.removeItem(
-            "celk_paciente_pendente"
-        );
-    }catch(_){}
+        localStorage.removeItem("celk_paciente_pendente");
+    }catch(_){ }
 
     return true;
 }
 
-// Captura o clique de finalização em fase de CAPTURE.
-// Assim o registro acontece antes do CELK executar o próprio
-// onclick/navegação e remover a tela do paciente.
 function instalarCapturaFinalizacaoRelatorio(){
-    if(window.celk.finalizacaoRelatorioHook){
-        return;
-    }
+    if(window.celk.finalizacaoRelatorioHook) return;
 
     window.celk.finalizacaoRelatorioHook = true;
 
-    const capturarFinalizacao = function(evento){
+    function elementoFinalizacaoDoEvento(evento){
+        const candidatos = [];
 
         try{
+            const alvo = evento && evento.target;
 
-            const alvo =
-                evento.target &&
-                evento.target.closest
-                    ? evento.target.closest(
-                        "a,button,input"
-                    )
-                    : null;
-
-            if(!alvo){
-                return;
+            if(alvo && alvo.closest){
+                [
+                    "a.btn-finalizar-prontuario",
+                    "a",
+                    "button",
+                    "input",
+                    "[role='button']",
+                    "[onclick]"
+                ].forEach(function(seletor){
+                    try{
+                        const el = alvo.closest(seletor);
+                        if(el) candidatos.push(el);
+                    }catch(_){ }
+                });
             }
+        }catch(_){ }
 
+        try{
+            if(evento && typeof evento.composedPath === "function"){
+                for(const el of evento.composedPath()){
+                    if(el && el.nodeType === 1){
+                        candidatos.push(el);
+                    }
+                }
+            }
+        }catch(_){ }
+
+        return [...new Set(candidatos)].find(function(el){
             const texto = normalizarCelk(
-                alvo.innerText ||
-                alvo.value ||
-                alvo.getAttribute("title") ||
-                alvo.getAttribute("alt") ||
+                el.innerText ||
+                el.value ||
+                el.getAttribute("title") ||
+                el.getAttribute("alt") ||
+                el.getAttribute("aria-label") ||
                 ""
             );
 
-            const id = normalizarCelk(
-                alvo.id || ""
+            const id = normalizarCelk(el.id || "");
+            const classe = normalizarCelk(el.className || "");
+
+            if(
+                el.matches &&
+                el.matches("a.btn-finalizar-prontuario")
+            ){
+                return true;
+            }
+
+            return (
+                id.includes("BTNFINALIZARPRONTUARIO") ||
+                id.includes("FINALIZARPRONTUARIO") ||
+                classe.includes("BTN FINALIZAR PRONTUARIO") ||
+                classe.includes("BTN-FINALIZAR-PRONTUARIO") ||
+                texto.includes("SALVAR ATENDIMENTO") ||
+                texto.includes("SALVAR O ATENDIMENTO") ||
+                texto.includes("FINALIZAR PRONTUARIO") ||
+                texto.includes("FINALIZAR ATENDIMENTO")
             );
+        }) || null;
+    }
 
-            const classe = normalizarCelk(
-                alvo.className || ""
-            );
+    function capturarFinalizacao(evento){
+        try{
+            const alvo = elementoFinalizacaoDoEvento(evento);
+            if(!alvo) return;
 
-            const ehFinalizacao =
-                id.includes(
-                    "BTNFINALIZARPRONTUARIO"
-                ) ||
-                classe.includes(
-                    "BTN FINALIZAR PRONTUARIO"
-                ) ||
-                texto.includes(
-                    "SALVAR ATENDIMENTO"
-                ) ||
-                texto.includes(
-                    "SALVAR O ATENDIMENTO"
-                ) ||
-                texto.includes(
-                    "FINALIZAR PRONTUARIO"
-                ) ||
-                texto.includes(
-                    "FINALIZAR ATENDIMENTO"
-                );
+            const agoraMs = Date.now();
 
-            if(!ehFinalizacao){
+            if(
+                window.celk.ultimaCapturaFinalizacao &&
+                agoraMs - window.celk.ultimaCapturaFinalizacao < 1200
+            ){
                 return;
             }
 
-            // Apenas registrar; NÃO impedir o clique do CELK.
-            registrarFinalizacaoRelatorio();
+            window.celk.ultimaCapturaFinalizacao = agoraMs;
 
-        }catch(err){
-
-            console.error(
-                "[CELK RELATÓRIO V39] ERRO NA CAPTURA DA FINALIZAÇÃO:",
-                err
+            console.log(
+                "[CELK RELATÓRIO] FINALIZAÇÃO DETECTADA.",
+                alvo
             );
 
+            registrarFinalizacaoRelatorio();
+        }catch(err){
+            console.error(
+                "[CELK RELATÓRIO] ERRO NA CAPTURA DA FINALIZAÇÃO:",
+                err
+            );
         }
+    }
 
-    };
+    // IMPORTANTE:
+    // Não registrar a saída no clique/pointerdown.
+    // Esses eventos acontecem ANTES de o CELK concluir o atendimento.
+    // A saída será registrada exclusivamente quando o CELK informar:
+    // "ATENDIMENTO FINALIZADO COM SUCESSO".
+    console.log(
+        "[CELK RELATÓRIO] SAÍDA: aguardando confirmação real de finalização do CELK."
+    );
+}
 
-    document.addEventListener(
-        "mousedown",
-        capturarFinalizacao,
-        true
+function instalarMonitorSucessoFinalizacao(){
+    if(window.celk.monitorSucessoFinalizacao) return;
+
+    window.celk.monitorSucessoFinalizacao = true;
+
+    let ultimaMensagem = 0;
+
+    function localizarPendenteAnterior(agoraMs){
+        try{
+            let historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+
+            if(!Array.isArray(historico)) return null;
+
+            const lista = obterListaRelatorio();
+
+            for(let i=historico.length-1;i>=0;i--){
+                const item = historico[i];
+
+                if(!item || !item.nome) continue;
+                if(Number(item.salvoEm || 0) > agoraMs) continue;
+
+                const paciente = localizarPacienteNoRelatorio(
+                    lista,
+                    item.nome,
+                    item.chegada
+                );
+
+                if(paciente && !paciente.saida){
+                    return item;
+                }
+            }
+
+            return null;
+        }catch(_){
+            return null;
+        }
+    }
+
+    function verificarMensagem(){
+        try{
+            const texto = normalizarCelk(
+                document.body && document.body.innerText || ""
+            );
+
+            if(!texto.includes("ATENDIMENTO FINALIZADO COM SUCESSO")){
+                return;
+            }
+
+            const agoraMs = Date.now();
+
+            if(agoraMs - ultimaMensagem < 1500) return;
+
+            ultimaMensagem = agoraMs;
+
+            let dados = dadosPacienteAtual();
+
+            if(!dados || !dados.nome){
+                dados = localizarPendenteAnterior(agoraMs);
+            }
+
+            if(!dados || !dados.nome){
+                console.warn(
+                    "[CELK RELATÓRIO] SUCESSO DETECTADO, MAS PACIENTE NÃO RECUPERADO."
+                );
+                return;
+            }
+
+            registrarFinalizacaoRelatorio(dados);
+
+            // Segunda verificação curta para casos em que o CELK troca a tela
+            // imediatamente após mostrar a confirmação.
+            setTimeout(function(){
+                try{
+                    const novamente = dadosPacienteAtual() || localizarPendenteAnterior(Date.now());
+                    if(novamente && novamente.nome){
+                        const listaAtual = obterListaRelatorio();
+                        const alvoAtual = listaAtual.find(function(item){
+                            return (
+                                normalizarClassificacaoTexto(item.nome) ===
+                                normalizarClassificacaoTexto(novamente.nome)
+                            ) && !item.saida;
+                        });
+                        if(alvoAtual){
+                            registrarFinalizacaoRelatorio(novamente);
+                        }
+                    }
+                }catch(_){}
+            },250);
+        }catch(err){
+            console.error(
+                "[CELK RELATÓRIO] ERRO NO MONITOR DE SUCESSO:",
+                err
+            );
+        }
+    }
+
+    const observer = new MutationObserver(function(){
+        verificarMensagem();
+    });
+
+    observer.observe(
+        document.documentElement || document.body,
+        {
+            childList:true,
+            subtree:true,
+            characterData:true
+        }
     );
 
-    document.addEventListener(
-        "click",
-        capturarFinalizacao,
-        true
-    );
+    setTimeout(verificarMensagem,100);
+
+    window.celk.observadorSucessoFinalizacao = observer;
 
     console.log(
-        "[CELK RELATÓRIO V39] CAPTURA DE FINALIZAÇÃO INSTALADA."
+        "[CELK RELATÓRIO] FALLBACK DE SUCESSO INSTALADO."
     );
 }
 
-// Mantida por compatibilidade com versões anteriores.
-// Agora ela faz PRÉ-REGISTRO, e não marca o paciente como atendido.
-function adicionarRelatorio(
-    nome,
-    idade,
-    chegada,
-    classificacao
-){
-    preRegistrarNoRelatorio(
-        nome,
-        idade,
-        chegada,
-        classificacao
+// =========================================================
+// RELATÓRIO — VISUALIZAÇÃO
+// =========================================================
+
+function escaparHtmlRelatorio(valor){
+    return String(valor ?? "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#39;");
+}
+
+function obterCorClassificacaoRelatorio(classificacao){
+    switch(normalizarClassificacaoTexto(classificacao)){
+        case "VERDE": return "#d9ead3";
+        case "AMARELO": return "#fff2cc";
+        case "LARANJA": return "#fce5cd";
+        case "VERMELHO": return "#f4cccc";
+        case "AZUL": return "#cfe2f3";
+        default: return "#ffffff";
+    }
+}
+
+
+function repararRelatorioExistente(){
+    try{
+        const lista = obterListaRelatorio();
+        if(!Array.isArray(lista) || !lista.length) return;
+
+        let historico = [];
+        try{
+            historico = JSON.parse(
+                localStorage.getItem("celk_pendentes_historico") || "[]"
+            );
+        }catch(_){
+            historico = [];
+        }
+
+        if(!Array.isArray(historico)) historico = [];
+
+        let alterou = false;
+
+        lista.forEach(function(paciente){
+            const chave = normalizarClassificacaoTexto(paciente.nome);
+
+            // Recupera classificação já capturada na fila.
+            // Primeiro usa o cache e, se necessário, consulta a tabela
+            // atual do CELK antes de abrir o relatório.
+            if(
+                (!paciente.classificacao ||
+                 paciente.classificacao === "NÃO IDENTIFICADA")
+            ){
+                let classificacao = obterClassificacaoDoCache(paciente.nome);
+
+                if(classificacao === "NÃO IDENTIFICADA"){
+                    try{
+                        classificacao = obterClassificacao(paciente.nome);
+                    }catch(_){
+                        classificacao = "NÃO IDENTIFICADA";
+                    }
+                }
+
+                if(classificacao !== "NÃO IDENTIFICADA"){
+                    paciente.classificacao = classificacao;
+                    alterou = true;
+                }
+            }
+
+            // Recupera chegada do histórico do clique na fila.
+            if(!paciente.chegada){
+                for(let i=historico.length-1;i>=0;i--){
+                    const h = historico[i];
+                    if(
+                        h &&
+                        h.nome &&
+                        normalizarClassificacaoTexto(h.nome) === chave &&
+                        /^\d{1,2}:\d{2}$/.test(String(h.chegada || "").trim())
+                    ){
+                        paciente.chegada = String(h.chegada).trim();
+
+                        if(
+                            h.classificacao &&
+                            h.classificacao !== "NÃO IDENTIFICADA" &&
+                            (
+                                !paciente.classificacao ||
+                                paciente.classificacao === "NÃO IDENTIFICADA"
+                            )
+                        ){
+                            paciente.classificacao = h.classificacao;
+                        }
+
+                        alterou = true;
+                        break;
+                    }
+                }
+            }
+
+            // Recalcula o T. Total sempre que já existirem Chegada e Saída.
+            // T. Total = Saída - Chegada.
+            // TEMPO TOTAL DE ATENDIMENTO = SAÍDA - ATENDIDO.
+            // Não usar CHEGADA para esse campo.
+            if(paciente.atendido && paciente.saida){
+                const novoTempoAtendimento = calcularTempoAtendimentoRelatorio(
+                    paciente.atendido,
+                    paciente.saida
+                );
+
+                if(paciente.tempoAtendimento !== novoTempoAtendimento){
+                    paciente.tempoAtendimento = novoTempoAtendimento;
+                    alterou = true;
+                }
+
+                // Compatibilidade com registros antigos.
+                if(paciente.tempoTotal !== novoTempoAtendimento){
+                    paciente.tempoTotal = novoTempoAtendimento;
+                    alterou = true;
+                }
+            }else{
+                // Limpa valores antigos/incorretos que possam ter sido
+                // calculados antes da separação ATENDIDO/SAÍDA.
+                if(paciente.tempoAtendimento){
+                    paciente.tempoAtendimento = "";
+                    alterou = true;
+                }
+
+                if(paciente.tempoTotal){
+                    paciente.tempoTotal = "";
+                    alterou = true;
+                }
+            }
+        });
+
+        if(alterou){
+            salvarListaRelatorio(lista);
+        }
+    }catch(err){
+        console.warn(
+            "[CELK RELATÓRIO] FALHA AO REPARAR DADOS EXISTENTES:",
+            err
+        );
+    }
+}
+
+function abrirRelatorio(){
+    repararRelatorioExistente();
+    const pacientes = obterListaRelatorio();
+    const aba = window.open("","_blank");
+
+    if(!aba){
+        alert("O navegador bloqueou a abertura do relatório.");
+        return;
+    }
+
+    window.celkRelatorioWindow = aba;
+
+    function montarHtml(lista){
+        let html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Relatório do Plantão</title>
+<style>
+body{font-family:Arial,sans-serif;margin:30px;color:#111}
+h1{margin:0 0 5px;font-size:28px}
+.info{font-size:16px;line-height:1.5}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border:1px solid #ccc;padding:8px;text-align:center;vertical-align:middle}
+th{background:#f3f3f3;font-weight:700}
+td.nome{text-align:left}
+td.classificacao{font-weight:700}
+td.horario{white-space:nowrap}
+#imprimir{margin-top:20px;padding:9px 16px;font-size:15px;cursor:pointer}
+@media print{#imprimir{display:none}body{margin:15mm}}
+</style>
+</head>
+<body>
+<h1>RELATÓRIO DO PLANTÃO</h1>
+<div class="info"><b>Data:</b> ${escaparHtmlRelatorio(localStorage.getItem("celk_relatorio_data") || new Date().toLocaleDateString("pt-BR"))}</div>
+<div class="info"><b>Total de pacientes:</b> <span id="total">${lista.length}</span></div>
+<table>
+<thead>
+<tr>
+<th>Nº</th>
+<th>Nome</th>
+<th>Idade</th>
+<th>Classificação</th>
+<th>Chegada</th>
+</tr>
+</thead>
+<tbody id="corpo">
+${lista.length ? lista.map(function(paciente){
+    const classificacao = paciente.classificacao || "NÃO IDENTIFICADA";
+    const cor = obterCorClassificacaoRelatorio(classificacao);
+    return `
+<tr>
+<td>${escaparHtmlRelatorio(paciente.numero)}</td>
+<td class="nome">${escaparHtmlRelatorio(paciente.nome)}</td>
+<td>${escaparHtmlRelatorio(paciente.idade)}</td>
+<td class="classificacao" style="background:${cor}">${escaparHtmlRelatorio(classificacao)}</td>
+<td class="horario">${escaparHtmlRelatorio(paciente.chegada)}</td>
+</tr>`;
+}).join("") : `
+<tr><td colspan="5">NENHUM PACIENTE REGISTRADO.</td></tr>
+`}
+</tbody>
+</table>
+<button id="imprimir" onclick="window.print()">IMPRIMIR</button>
+<script>
+window.addEventListener("message",function(evento){
+    if(!evento.data || evento.data.tipo !== "CELK_RELATORIO_ATUALIZAR") return;
+
+    const lista = Array.isArray(evento.data.lista) ? evento.data.lista : [];
+    const corpo = document.getElementById("corpo");
+    const total = document.getElementById("total");
+
+    if(total) total.textContent = lista.length;
+    if(!corpo) return;
+
+    const esc = function(v){
+        return String(v ?? "")
+            .replace(/&/g,"&amp;")
+            .replace(/</g,"&lt;")
+            .replace(/>/g,"&gt;")
+            .replace(/"/g,"&quot;")
+            .replace(/'/g,"&#39;");
+    };
+
+    corpo.innerHTML = lista.length ? lista.map(function(paciente){
+        const c = String(paciente.classificacao || "NÃO IDENTIFICADA").toUpperCase();
+        const cor = c === "VERDE" ? "#d9ead3" :
+                    c === "AMARELO" ? "#fff2cc" :
+                    c === "LARANJA" ? "#fce5cd" :
+                    c === "VERMELHO" ? "#f4cccc" :
+                    c === "AZUL" ? "#cfe2f3" : "#fff";
+
+        return "<tr>"+
+            "<td>"+esc(paciente.numero)+"</td>"+
+            "<td class=\"nome\">"+esc(paciente.nome)+"</td>"+
+            "<td>"+esc(paciente.idade)+"</td>"+
+            "<td class=\"classificacao\" style=\"background:"+cor+"\">"+esc(c)+"</td>"+
+            "<td>"+esc(paciente.chegada)+"</td>"+
+            "</tr>";
+    }).join("") : "<tr><td colspan=\"9\">NENHUM PACIENTE REGISTRADO.</td></tr>";
+});
+</script>
+</body>
+</html>`;
+
+        return html;
+    }
+
+    aba.document.open();
+    aba.document.write(montarHtml(pacientes));
+    aba.document.close();
+}
+
+// Instala a captura de ATENDIDO aqui para não alterar a estrutura
+// dos botões do Helper nem os outros módulos do V32.
+try{
+    instalarCapturaInicioAtendimentoRelatorio();
+}catch(err){
+    console.error(
+        "[CELK RELATÓRIO] ERRO AO INSTALAR CAPTURA DE ATENDIDO:",
+        err
     );
 }
 
-//--------------------------------------------------
 // DECLARAÇÕES — MENU E PREENCHIMENTO
 //--------------------------------------------------
 
@@ -3051,7 +3794,10 @@ function obterDadosPacienteDeclaracao(){
 
     const tela = document.body.innerText || "";
 
-    // Mesmo padrão já usado no Helper para o cabeçalho do paciente.
+    // =========================================================
+    // PACIENTE
+    // =========================================================
+
     const cabecalho = tela.match(
         /([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ ]+)\s*\|\s*([^|]+)\s*\|\s*DN:/i
     );
@@ -3064,22 +3810,273 @@ function obterDadosPacienteDeclaracao(){
         ? cabecalho[2].trim()
         : "";
 
-    // Para a declaração, usar somente a idade em anos.
     const idadeMatch = idadeTexto.match(/(\d+)\s*anos?/i);
     const idade = idadeMatch ? idadeMatch[1] : idadeTexto;
 
-    // Horário de chegada: prioriza a triagem.
-    let chegada = "";
 
-    const mTriagem = tela.match(
-        /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
-    );
+    // =========================================================
+    // NOME DA MÃE / RESPONSÁVEL
+    // =========================================================
+    // O CELK pode apresentar a filiação em formatos diferentes.
+    // Tentamos primeiro campos reais da tela e depois o texto visível.
+    // =========================================================
 
-    if(mTriagem){
-        chegada = mTriagem[1];
+    function normalizarNomeDeclaracao(valor){
+        return String(valor || "")
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
     }
 
-    // Fallbacks caso o texto da triagem esteja em outro formato.
+    function nomeMaeValido(valor){
+        const nomeTestado = normalizarNomeDeclaracao(valor);
+
+        if(!nomeTestado) return false;
+        if(nomeTestado.length < 5) return false;
+
+        if(/^(MÃ?E|MAE|PAI|NOME|FILIAÇÃO|FILIACAO|RESPONSÁVEL|RESPONSAVEL)$/i.test(nomeTestado)){
+            return false;
+        }
+
+        if(/^(NÃO INFORMADO|NAO INFORMADO|NÃO CADASTRADO|NAO CADASTRADO|NÃO POSSUI|NAO POSSUI|IGNORADO|DESCONHECIDO)$/i.test(nomeTestado)){
+            return false;
+        }
+
+        // Nome não deve conter números.
+        if(/\d/.test(nomeTestado)) return false;
+
+        // Evita capturar textos muito grandes da página.
+        if(nomeTestado.length > 120) return false;
+
+        return true;
+    }
+
+    function obterNomeMae(){
+
+        // ---------------------------------------------------------
+        // 1) Campos com identificadores relacionados a mãe/filiação
+        // ---------------------------------------------------------
+
+        const campos = [
+            ...document.querySelectorAll("input, textarea, select")
+        ];
+
+        for(const campo of campos){
+
+            const identificadores = [
+                campo.id || "",
+                campo.name || "",
+                campo.getAttribute("wicketpath") || "",
+                campo.getAttribute("aria-label") || "",
+                campo.getAttribute("title") || "",
+                campo.getAttribute("placeholder") || ""
+            ].join(" ").toUpperCase();
+
+            const ehMae =
+                identificadores.includes("NOMEMAE") ||
+                identificadores.includes("NOME_MAE") ||
+                identificadores.includes("NOME-MAE") ||
+                identificadores.includes("NOME DA MAE") ||
+                identificadores.includes("NOME DA MÃE") ||
+                /\bMAE\b/.test(identificadores) ||
+                /\bMÃE\b/.test(identificadores) ||
+                identificadores.includes("FILIAÇÃO") ||
+                identificadores.includes("FILIACAO");
+
+            if(!ehMae) continue;
+
+            const valor =
+                campo.value ||
+                campo.getAttribute("value") ||
+                campo.textContent ||
+                "";
+
+            if(nomeMaeValido(valor)){
+                return normalizarNomeDeclaracao(valor).toUpperCase();
+            }
+        }
+
+
+        // ---------------------------------------------------------
+        // 2) Procura no texto visível por:
+        //    NOME DA MÃE: XXXXX
+        //    MÃE: XXXXX
+        //    FILIAÇÃO: XXXXX / XXXXX
+        // ---------------------------------------------------------
+
+        const linhas = tela
+            .split(/\n+/)
+            .map(linha => normalizarNomeDeclaracao(linha))
+            .filter(Boolean);
+
+        for(let i = 0; i < linhas.length; i++){
+
+            const linha = linhas[i];
+
+            const mMae = linha.match(
+                /(?:NOME\s+DA\s+M[ÃA]E|M[ÃA]E)\s*[:\-]\s*(.+)$/i
+            );
+
+            if(mMae && nomeMaeValido(mMae[1])){
+                return normalizarNomeDeclaracao(mMae[1]).toUpperCase();
+            }
+
+            const mFiliacao = linha.match(
+                /FILIA(?:Ç|C)[AÃ]O\s*[:\-]\s*(.+)$/i
+            );
+
+            if(mFiliacao){
+
+                const partes = mFiliacao[1]
+                    .split(/\s*(?:\/|;|\|| e )\s*/i)
+                    .map(x => normalizarNomeDeclaracao(x))
+                    .filter(nomeMaeValido);
+
+                if(partes.length){
+                    // Quando houver dois nomes, o primeiro é usado como mãe.
+                    return partes[0].toUpperCase();
+                }
+            }
+
+            // -----------------------------------------------------
+            // 3) Quando o CELK coloca "Mãe" em uma linha e o nome
+            //    na linha seguinte.
+            // -----------------------------------------------------
+
+            if(/^(NOME\s+DA\s+M[ÃA]E|M[ÃA]E)$/i.test(linha)){
+
+                const proxima = linhas[i + 1] || "";
+
+                if(nomeMaeValido(proxima)){
+                    return proxima.toUpperCase();
+                }
+            }
+        }
+
+
+        // ---------------------------------------------------------
+        // 4) Procura elementos que contenham "Nome da Mãe" e pega
+        //    o valor do campo ou o texto imediatamente próximo.
+        // ---------------------------------------------------------
+
+        const elementos = [
+            ...document.querySelectorAll(
+                "label, td, th, div, span, p, strong"
+            )
+        ];
+
+        for(const el of elementos){
+
+            const texto = normalizarNomeDeclaracao(
+                el.innerText || el.textContent || ""
+            );
+
+            if(!/^(NOME\s+DA\s+M[ÃA]E|M[ÃA]E|FILIA(?:Ç|C)[AÃ]O)$/i.test(texto)){
+                continue;
+            }
+
+            // Campo dentro do próprio elemento/pai.
+            const raiz = el.parentElement || el;
+            const campo = raiz.querySelector(
+                "input, textarea, select"
+            );
+
+            if(campo){
+
+                const valor =
+                    campo.value ||
+                    campo.getAttribute("value") ||
+                    campo.textContent ||
+                    "";
+
+                if(nomeMaeValido(valor)){
+                    return normalizarNomeDeclaracao(valor).toUpperCase();
+                }
+            }
+
+            // Texto do próximo irmão.
+            let proximo = el.nextElementSibling;
+
+            if(proximo){
+
+                const valor = normalizarNomeDeclaracao(
+                    proximo.innerText || proximo.textContent || ""
+                );
+
+                if(nomeMaeValido(valor)){
+                    return valor.toUpperCase();
+                }
+            }
+        }
+
+
+        console.warn(
+            "[CELK Helper V32] Nome da mãe não encontrado na tela."
+        );
+
+        return "NÃO IDENTIFICADO";
+    }
+
+    const nomeMae = obterNomeMae();
+
+
+    // =========================================================
+    // HORÁRIO DE CHEGADA
+    // =========================================================
+    //
+    // Usa o horário REAL registrado pelo CELK na fila do paciente.
+    // Esse é o valor da célula ..._cells_8_cell, por exemplo:
+    // "19/08/2026 - 07:25 BRT".
+    //
+
+    let chegada = "";
+
+    // Primeiro: registro persistido quando o paciente foi clicado
+    // na fila do CELK.
+    try{
+        const pendente = JSON.parse(
+            localStorage.getItem("celk_paciente_pendente") || "null"
+        );
+
+        if(
+            pendente &&
+            pendente.nome &&
+            /^\d{1,2}:\d{2}$/.test(
+                String(pendente.chegada || "").trim()
+            )
+        ){
+            chegada = String(pendente.chegada).trim();
+        }
+    }catch(_){ }
+
+    // Segundo: relatório persistido.
+    if(!chegada){
+        try{
+            const lista = obterListaRelatorio();
+            const paciente = lista.find(function(item){
+                return (
+                    normalizarClassificacaoTexto(item.nome) ===
+                    normalizarClassificacaoTexto(nome)
+                ) && item.chegada;
+            });
+
+            if(paciente){
+                chegada = String(paciente.chegada).trim();
+            }
+        }catch(_){ }
+    }
+
+    // Terceiro: fallback pelo texto visível da tela.
+    if(!chegada){
+        const mTriagem = tela.match(
+            /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+        );
+
+        if(mTriagem){
+            chegada = mTriagem[1];
+        }
+    }
+
     if(!chegada){
         const mChegada = tela.match(
             /(?:CHEGADA|ENTRADA)[^\d]{0,40}(\d{2}:\d{2})/i
@@ -3094,6 +4091,11 @@ function obterDadosPacienteDeclaracao(){
         chegada = "NÃO IDENTIFICADO";
     }
 
+
+    // =========================================================
+    // DATA / SAÍDA
+    // =========================================================
+
     const agora = new Date();
 
     const data = agora.toLocaleDateString("pt-BR",{
@@ -3102,14 +4104,18 @@ function obterDadosPacienteDeclaracao(){
         year:"numeric"
     });
 
+    // SAÍDA DA DECLARAÇÃO = horário REAL do momento do preenchimento.
+    // Não acrescenta minutos.
     const saida = agora.toLocaleTimeString("pt-BR",{
         hour:"2-digit",
         minute:"2-digit",
         hourCycle:"h23"
     });
 
+
     return {
         nome,
+        nomeMae,
         idade,
         chegada,
         saida,
@@ -3405,10 +4411,166 @@ function montarDeclaracaoPaciente(dados){
     `;
 }
 
+
+function extrairNomeAcompanhanteDoEditor(alvos){
+    /*
+     * IMPORTANTE:
+     * O CELK preenche o nome da acompanhante/mãe na declaração
+     * nativa. Esse nome NÃO fica no body principal antes da criação
+     * do documento.
+     *
+     * Portanto, depois que o modelo "DECLARAÇÃO DE COMPARECIMENTO
+     * (ACOMPANHANTE)" é aberto, lemos o conteúdo que o próprio CELK
+     * acabou de inserir no TinyMCE e extraímos o nome dali.
+     */
+
+    const normalizar = valor => String(valor || "")
+        .replace(/[\u200B-\u200D\uFEFF]/g,"")
+        .replace(/\u00A0/g," ")
+        .replace(/\s+/g," ")
+        .trim();
+
+    const valido = valor => {
+        const n = normalizar(valor);
+
+        if(!n || n.length < 5 || n.length > 120) return false;
+        if(/\d/.test(n)) return false;
+
+        if(
+            /^(NÃO IDENTIFICADO|NAO IDENTIFICADO|NÃO INFORMADO|NAO INFORMADO)$/i
+                .test(n)
+        ){
+            return false;
+        }
+
+        return true;
+    };
+
+    for(const alvo of (alvos || [])){
+
+        let texto = "";
+        let html = "";
+
+        try{
+            const elemento = alvo?.elemento;
+
+            if(elemento){
+                texto =
+                    elemento.innerText ||
+                    elemento.textContent ||
+                    "";
+
+                html = elemento.innerHTML || "";
+            }
+        }catch(_){}
+
+        // Tenta também pelo editor TinyMCE associado ao elemento.
+        try{
+            if(window.tinymce?.editors?.length){
+                const editor = window.tinymce.editors.find(ed => {
+                    try{
+                        const body = ed.getBody?.();
+                        return body === alvo?.elemento ||
+                               body?.contains?.(alvo?.elemento) ||
+                               alvo?.elemento?.contains?.(body);
+                    }catch(_){
+                        return false;
+                    }
+                });
+
+                if(editor){
+                    texto = editor.getContent({format:"text"}) || texto;
+                    html = editor.getContent() || html;
+                }
+            }
+        }catch(_){}
+
+        texto = normalizar(texto);
+
+        // Caso mais direto: o CELK coloca o nome dentro de <span>.
+        const spans = [];
+        try{
+            const doc =
+                alvo?.elemento?.ownerDocument ||
+                document;
+
+            spans.push(
+                ...doc.querySelectorAll(
+                    "span"
+                )
+            );
+        }catch(_){}
+
+        for(const span of spans){
+
+            const nome = normalizar(
+                span.innerText ||
+                span.textContent ||
+                ""
+            );
+
+            if(!valido(nome)) continue;
+
+            /*
+             * Evita pegar spans de assinatura, data, estilos etc.
+             * O nome da acompanhante aparece imediatamente na frase
+             * "Sr. (a)".
+             */
+            const paiTexto = normalizar(
+                span.parentElement?.innerText ||
+                span.parentElement?.textContent ||
+                ""
+            );
+
+            if(
+                /Sr\.\s*\(?a\)?/i.test(paiTexto) ||
+                /Sr\.?\s*\(?a\)?/i.test(paiTexto)
+            ){
+                return nome.toUpperCase();
+            }
+        }
+
+        // Fallback pelo texto da declaração nativa.
+        const m = texto.match(
+            /Sr\.?\s*\(?a\)?\s*[:\-]?\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ][A-ZÁÀÂÃÉÊÍÓÔÕÚÇ' .-]{4,119}?)(?=\s+esteve\s+na\s+Unidade)/i
+        );
+
+        if(m && valido(m[1])){
+            return normalizar(m[1]).toUpperCase();
+        }
+
+        // Fallback pelo HTML: captura exatamente o conteúdo do span
+        // que vem depois de "Sr. (a)".
+        const mh = html.match(
+            /Sr\.?\s*\(?a\)?[^<]{0,80}<span[^>]*>\s*([^<]+?)\s*<\/span>/i
+        );
+
+        if(mh && valido(mh[1])){
+            return normalizar(mh[1]).toUpperCase();
+        }
+    }
+
+    console.warn(
+        "[CELK Helper V32] Não consegui extrair do editor o nome da acompanhante."
+    );
+
+    return "";
+}
+
 function montarDeclaracaoAcompanhante(dados){
 
+    const nomeMae = dados.nomeMae || "NÃO IDENTIFICADO";
+
     return `
-        <p style="margin:0 0 18px 0;"><strong>DECLARAÇÃO DE COMPARECIMENTO</strong></p>
+        <p style="margin:0 0 18px 0;">
+            <strong>DECLARAÇÃO DE COMPARECIMENTO (ACOMPANHANTE)</strong>
+        </p>
+
+        <p style="margin:0 0 12px 0;">
+            Declaro para os devidos fins, que o(a) Sr.(a)
+            <strong>${nomeMae}</strong>
+            esteve na Unidade Pronto Atendimento, para acompanhar o seguinte paciente:
+        </p>
 
         <p style="margin:0 0 12px 0;">
             Nome do Paciente: <strong>${dados.nome}</strong>,
@@ -3637,6 +4799,40 @@ async function prepararDeclaracao(acompanhante){
                 "O editor da Declaração não foi encontrado."
             );
         }
+
+        // --------------------------------------------------
+        // O CELK já preenche automaticamente o nome da mãe/
+        // acompanhante no documento nativo.
+        //
+        // Pegamos esse nome AGORA, antes de substituir o conteúdo
+        // do editor pelo nosso modelo personalizado.
+        // --------------------------------------------------
+        if(acompanhante){
+
+            const nomeNativo =
+                extrairNomeAcompanhanteDoEditor(alvos);
+
+            if(nomeNativo){
+                dados.nomeMae = nomeNativo;
+
+                console.log(
+                    "[CELK Helper V32] NOME DA ACOMPANHANTE CAPTURADO DO CELK:",
+                    dados.nomeMae
+                );
+            }else{
+                console.warn(
+                    "[CELK Helper V32] CELK abriu a declaração, mas não foi possível capturar o nome da acompanhante."
+                );
+            }
+        }
+
+        // SAÍDA DA DECLARAÇÃO = horário REAL no momento do
+        // preenchimento final do documento. Sem +10 minutos.
+        dados.saida = new Date().toLocaleTimeString("pt-BR",{
+            hour:"2-digit",
+            minute:"2-digit",
+            hourCycle:"h23"
+        });
 
         const html = acompanhante
             ? montarDeclaracaoAcompanhante(dados)
@@ -5868,349 +7064,6 @@ const lista = [
 
 }
 
-function atualizarClassificacoesRelatorioVisiveis(){
-
-    let lista = [];
-
-    try{
-        lista = JSON.parse(
-            localStorage.getItem("celk_relatorio") || "[]"
-        );
-    }catch(_){
-        return;
-    }
-
-    if(!Array.isArray(lista) || !lista.length){
-        return;
-    }
-
-    let alterou = false;
-
-    lista.forEach(function(paciente){
-
-        if(!paciente || !paciente.nome){
-            return;
-        }
-
-        // Somente aceita uma classificação encontrada na linha
-        // correspondente ao paciente. Nunca usa fallback global.
-        const classificacao = obterClassificacaoDoCache(paciente.nome) !== "NÃO IDENTIFICADA"
-            ? obterClassificacaoDoCache(paciente.nome)
-            : obterClassificacao(paciente.nome, true);
-
-        if(
-            classificacao &&
-            classificacao !== "NÃO IDENTIFICADA" &&
-            paciente.classificacao !== classificacao
-        ){
-            paciente.classificacao = classificacao;
-            alterou = true;
-
-            console.log(
-                "[CELK Helper V32] RELATÓRIO ANTIGO CORRIGIDO:",
-                paciente.nome,
-                "=>",
-                classificacao
-            );
-        }
-    });
-
-    if(alterou){
-        localStorage.setItem(
-            "celk_relatorio",
-            JSON.stringify(lista)
-        );
-    }
-}
-
-function obterCorClassificacaoRelatorio(classificacao){
-    const c = normalizarClassificacaoTexto(classificacao);
-
-    if(c === "VERMELHO"){
-        return "#f4cccc";
-    }
-
-    if(c === "LARANJA"){
-        return "#fce5cd";
-    }
-
-    if(c === "AMARELO"){
-        return "#fff2cc";
-    }
-
-    if(c === "VERDE"){
-        return "#d9ead3";
-    }
-
-    if(c === "AZUL"){
-        return "#cfe2f3";
-    }
-
-    return "#ffffff";
-}
-
-function abrirRelatorio(){
-
-    // Primeiro tenta atualizar o cache com a tabela atual.
-    try{
-        sincronizarClassificacoesDaTabela();
-    }catch(_){}
-
-    // Corrige registros antigos quando a classificação
-    // estiver disponível no cache/tabela.
-    try{
-        atualizarClassificacoesRelatorioVisiveis();
-    }catch(_){}
-
-    const pacientes = obterListaRelatorio();
-
-    const aba = window.open(
-        "",
-        "_blank"
-    );
-
-    if(!aba){
-        alert(
-            "O navegador bloqueou a abertura do Relatório.\n\n" +
-            "Permita pop-ups para o CELK Helper."
-        );
-        return;
-    }
-
-    let html = `
-<!DOCTYPE html>
-<html lang="pt-BR">
-
-<head>
-
-<meta charset="UTF-8">
-
-<title>Relatório do Plantão</title>
-
-<style>
-
-*{
-    box-sizing:border-box;
-}
-
-body{
-    font-family:Arial,Helvetica,sans-serif;
-    margin:30px;
-    color:#111;
-    background:#fff;
-}
-
-h1{
-    margin:0 0 4px 0;
-    font-size:28px;
-    font-weight:700;
-}
-
-.info{
-    font-size:16px;
-    line-height:1.45;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:20px;
-}
-
-th,
-td{
-    border:1px solid #c9c9c9;
-    padding:10px 8px;
-    text-align:center;
-    vertical-align:middle;
-}
-
-th{
-    background:#f1f1f1;
-    font-size:16px;
-    font-weight:700;
-}
-
-td.nome{
-    text-align:left;
-}
-
-td.classificacao{
-    font-weight:700;
-}
-
-#imprimir{
-    margin-top:20px;
-    padding:10px 18px;
-    font-size:16px;
-    cursor:pointer;
-    border:1px solid #888;
-    background:#f3f3f3;
-}
-
-#imprimir:hover{
-    background:#e7e7e7;
-}
-
-@media print{
-
-    body{
-        margin:15mm;
-    }
-
-    #imprimir{
-        display:none;
-    }
-
-    table{
-        margin-top:15px;
-    }
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<h1>RELATÓRIO DO PLANTÃO</h1>
-
-<div class="info">
-    <b>Data:</b>
-    ${escaparHtmlRelatorio(
-        localStorage.getItem("celk_relatorio_data") ||
-        new Date().toLocaleDateString("pt-BR")
-    )}
-</div>
-
-<div class="info">
-    <b>Total de pacientes:</b>
-    ${pacientes.length}
-</div>
-
-<table>
-
-<thead>
-
-<tr>
-    <th>Nº</th>
-    <th>Nome</th>
-    <th>Idade</th>
-    <th>Classificação</th>
-    <th>Chegada</th>
-</tr>
-
-</thead>
-
-<tbody>
-`;
-
-    if(!pacientes.length){
-
-        html += `
-<tr>
-    <td colspan="5">
-        NENHUM PACIENTE REGISTRADO.
-    </td>
-</tr>
-`;
-
-    }else{
-
-        pacientes.forEach(function(paciente){
-
-            const classificacao =
-                paciente.classificacao ||
-                "NÃO IDENTIFICADA";
-
-            const cor =
-                obterCorClassificacaoRelatorio(
-                    classificacao
-                );
-
-            html += `
-<tr>
-
-    <td>
-        ${escaparHtmlRelatorio(
-            paciente.numero
-        )}
-    </td>
-
-    <td class="nome">
-        ${escaparHtmlRelatorio(
-            paciente.nome
-        )}
-    </td>
-
-    <td>
-        ${escaparHtmlRelatorio(
-            paciente.idade
-        )}
-    </td>
-
-    <td
-        class="classificacao"
-        style="background:${cor};"
-    >
-        ${escaparHtmlRelatorio(
-            classificacao
-        )}
-    </td>
-
-    <td>
-        ${escaparHtmlRelatorio(
-            paciente.chegada
-        )}
-    </td>
-
-
-</tr>
-`;
-
-        });
-
-    }
-
-    html += `
-</tbody>
-
-</table>
-
-<button id="imprimir">
-    IMPRIMIR
-</button>
-
-<script>
-
-document
-    .getElementById("imprimir")
-    .addEventListener(
-        "click",
-        function(){
-            window.print();
-        }
-    );
-
-</script>
-
-</body>
-
-</html>
-`;
-
-    aba.document.open();
-    aba.document.write(html);
-    aba.document.close();
-
-    console.log(
-        "[CELK RELATÓRIO V39] RELATÓRIO ABERTO:",
-        pacientes.length,
-        "pacientes"
-    );
-}
-
 function clicarPesquisar(){
 
     const botoes=[
@@ -7418,11 +8271,55 @@ function iniciarObserver(){
     });
 
 }
-
-    window.celk.init = function(){
+window.celk.init = function(){
 
     criarInterface();
 
+    // --------------------------------------------------
+    // RELATÓRIO — INICIALIZAÇÃO REAL
+    // --------------------------------------------------
+
+    // O clique no nome é o ponto de entrada do relatório.
+    try{
+        instalarCapturaCliquePaciente();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR CAPTURA DE ENTRADA:",
+            err
+        );
+    }
+
+    // Mantém o cache das classificações sincronizado.
+    try{
+        sincronizarClassificacoesDaTabela();
+    }catch(err){
+        console.warn(
+            "[CELK RELATÓRIO] ERRO AO SINCRONIZAR CLASSIFICAÇÕES:",
+            err
+        );
+    }
+
+    // Captura a finalização do atendimento.
+    try{
+        instalarCapturaFinalizacaoRelatorio();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR FINALIZAÇÃO:",
+            err
+        );
+    }
+
+    // Fallback para a mensagem AJAX "Atendimento finalizado com sucesso".
+    try{
+        instalarMonitorSucessoFinalizacao();
+    }catch(err){
+        console.error(
+            "[CELK RELATÓRIO] ERRO AO INSTALAR MONITOR DE SUCESSO:",
+            err
+        );
+    }
+
+    // Funcionalidades que já existiam no script original.
     iniciarObserver();
 
     setTimeout(iniciarReceituario,1500);
