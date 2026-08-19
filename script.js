@@ -2426,9 +2426,22 @@ function extrairDadosDaLinhaPaciente(tr){
         'td[wicketpath*="_cells_6_cell"]'
     );
 
-    const chegadaCelula = tr.querySelector(
+    // CHEGADA = horário registrado pelo próprio CELK na fila.
+    // Ex.: "19/08/2026 - 07:25 BRT"
+    let chegadaCelula = tr.querySelector(
         'td[wicketpath*="_cells_8_cell"]'
     );
+
+    // Fallback caso o Wicket altere a estrutura da linha.
+    if(!chegadaCelula){
+        chegadaCelula = [...tr.querySelectorAll("td")].find(function(td){
+            const txt = String(
+                td.innerText || td.textContent || ""
+            ).replace(/\s+/g," ").trim();
+
+            return /\d{2}\/\d{2}\/\d{4}\s*[-–]\s*\d{2}:\d{2}/.test(txt);
+        }) || null;
+    }
 
     const bolaCelula = tr.querySelector(
         'td[wicketpath*="_cells_4_cell"]'
@@ -3034,6 +3047,8 @@ function registrarFinalizacaoRelatorio(dadosForcado){
         return false;
     }
 
+    // SAÍDA = horário REAL do clique em FINALIZAR/CONCLUIR.
+    // Capturado antes da ação do CELK. Sem +10 minutos.
     const saida = obterHorarioAtualRelatorio();
 
     let chegada = String(dados.chegada || "").trim();
@@ -3769,15 +3784,58 @@ function obterDadosPacienteDeclaracao(){
     // =========================================================
     // HORÁRIO DE CHEGADA
     // =========================================================
+    //
+    // Usa o horário REAL registrado pelo CELK na fila do paciente.
+    // Esse é o valor da célula ..._cells_8_cell, por exemplo:
+    // "19/08/2026 - 07:25 BRT".
+    //
 
     let chegada = "";
 
-    const mTriagem = tela.match(
-        /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
-    );
+    // Primeiro: registro persistido quando o paciente foi clicado
+    // na fila do CELK.
+    try{
+        const pendente = JSON.parse(
+            localStorage.getItem("celk_paciente_pendente") || "null"
+        );
 
-    if(mTriagem){
-        chegada = mTriagem[1];
+        if(
+            pendente &&
+            pendente.nome &&
+            /^\d{1,2}:\d{2}$/.test(
+                String(pendente.chegada || "").trim()
+            )
+        ){
+            chegada = String(pendente.chegada).trim();
+        }
+    }catch(_){ }
+
+    // Segundo: relatório persistido.
+    if(!chegada){
+        try{
+            const lista = obterListaRelatorio();
+            const paciente = lista.find(function(item){
+                return (
+                    normalizarClassificacaoTexto(item.nome) ===
+                    normalizarClassificacaoTexto(nome)
+                ) && item.chegada;
+            });
+
+            if(paciente){
+                chegada = String(paciente.chegada).trim();
+            }
+        }catch(_){ }
+    }
+
+    // Terceiro: fallback pelo texto visível da tela.
+    if(!chegada){
+        const mTriagem = tela.match(
+            /TRIAGEM[\s\S]*?(?:\d{2}\/\d{2}\/\d{4}\s*-\s*)?(\d{2}:\d{2})/i
+        );
+
+        if(mTriagem){
+            chegada = mTriagem[1];
+        }
     }
 
     if(!chegada){
@@ -3807,10 +3865,9 @@ function obterDadosPacienteDeclaracao(){
         year:"numeric"
     });
 
-    // Horário de saída = horário atual + 10 minutos
-    const saidaData = new Date(agora.getTime() + 10 * 60 * 1000);
-
-    const saida = saidaData.toLocaleTimeString("pt-BR",{
+    // SAÍDA DA DECLARAÇÃO = horário REAL do momento do preenchimento.
+    // Não acrescenta minutos.
+    const saida = agora.toLocaleTimeString("pt-BR",{
         hour:"2-digit",
         minute:"2-digit",
         hourCycle:"h23"
@@ -4530,16 +4587,9 @@ async function prepararDeclaracao(acompanhante){
             }
         }
 
-        // Recalcula a saída NO MOMENTO EXATO em que a declaração
-        // será preenchida: horário atual + 10 minutos.
-        // Isso evita usar um horário calculado antes da abertura
-        // do modelo nativo do CELK.
-        const agoraSaida = new Date();
-        const saidaMais10 = new Date(
-            agoraSaida.getTime() + 10 * 60 * 1000
-        );
-
-        dados.saida = saidaMais10.toLocaleTimeString("pt-BR",{
+        // SAÍDA DA DECLARAÇÃO = horário REAL no momento do
+        // preenchimento final do documento. Sem +10 minutos.
+        dados.saida = new Date().toLocaleTimeString("pt-BR",{
             hour:"2-digit",
             minute:"2-digit",
             hourCycle:"h23"
